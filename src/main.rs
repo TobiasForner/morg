@@ -8,7 +8,7 @@ use std::{
 };
 
 use adb_client::{ADBDeviceExt, ADBServer};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use pathdiff::diff_paths;
 
 const IMAGE_EXTENSIONS: [&str; 2] = ["jpg", "png"];
@@ -17,9 +17,48 @@ const MUSIC_EXTENSIONS: [&str; 3] = ["mp3", "flac", "wav"];
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Sets a custom config file
     #[arg(short, long, value_name = "PATH")]
     path: PathBuf,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// manipulates the config
+    Config {
+        #[command(subcommand)]
+        subcommand: ConfigCommands,
+    },
+    /// sync files in the sources to the destination directories. If a suitable ADB connection can
+    /// be established, the files are also synced to the first ADB device
+    Sync,
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// add a directory to the sources list
+    AddSource {
+        #[arg(short, long)]
+        directory: PathBuf,
+    },
+    /// add a directory to the destination list
+    AddDest {
+        #[arg(short, long)]
+        directory: PathBuf,
+        //TODO: specify filetype preferences
+    },
+}
+
+struct DirConfig {
+    source_directories: Vec<PathBuf>,
+    destination_directories: Vec<PathBuf>,
+}
+
+impl DirConfig {
+    fn read() -> Result<Self> {
+        todo!("read config from file")
+    }
 }
 
 #[derive(Debug)]
@@ -89,32 +128,51 @@ impl Album {
 }
 
 fn main() {
+    let res = run();
+    if res.is_err() {
+        println!("ERROR: {res:?}");
+    }
+}
+
+fn run() -> Result<()> {
     let args = Cli::parse();
-    let mut server = ADBServer::default();
-    let devices = server.devices();
+    match args.command {
+        Commands::Config { subcommand: _ } => {
+            let config = DirConfig::read()?;
+            todo!("Config subcommands")
+        }
+        Commands::Sync => {
+            let config = DirConfig::read();
+            // TODO: sync using config
+            let mut server = ADBServer::default();
+            let devices = server.devices();
 
-    println!("devices: {devices:?}");
-    let mut device = server.get_device().expect("cannot get device");
+            println!("devices: {devices:?}");
+            let mut device = server.get_device().expect("cannot get device");
 
-    let mut buf = BufWriter::new(Vec::new());
-    let command = vec!["find", "/storage/emulated/0/Music", "-type", "f"];
-    let _ = device.shell_command(&command, &mut buf);
-    let bytes = buf.into_inner().unwrap();
-    let out = String::from_utf8_lossy(&bytes).to_string();
-    let music_paths: Vec<PathBuf> = out
-        .lines()
-        .map(|l| PathBuf::from_str(l).expect("each line should be a valid path!"))
-        .collect();
-    let pb = PathBuf::from_str("/storage/emulated/0/Music").unwrap();
-    let albums = group_files_into_albums(&music_paths, pb.as_path());
-    albums.iter().for_each(|a| println!("{a:?}"));
+            let mut buf = BufWriter::new(Vec::new());
+            let command = vec!["find", "/storage/emulated/0/Music", "-type", "f"];
+            let _ = device.shell_command(&command, &mut buf);
+            let bytes = buf.into_inner().unwrap();
+            let out = String::from_utf8_lossy(&bytes).to_string();
+            let music_paths: Vec<PathBuf> = out
+                .lines()
+                .map(|l| PathBuf::from_str(l).expect("each line should be a valid path!"))
+                .collect();
+            let pb = PathBuf::from_str("/storage/emulated/0/Music").unwrap();
+            let albums = group_files_into_albums(&music_paths, pb.as_path());
+            albums.iter().for_each(|a| println!("{a:?}"));
 
-    println!("\n\n\n ==========");
-    let albums = albums_in_dir(&args.path);
-    albums.iter().for_each(|a| println!("{a:?}"));
+            println!("\n\n\n ==========");
+            let albums = albums_in_dir(&args.path);
+            albums.iter().for_each(|a| println!("{a:?}"));
+            Ok(())
+        }
+    }
 }
 
 fn group_files_into_albums(file_paths: &[PathBuf], root: &Path) -> Vec<Album> {
+    // TODO: handle potential trailing file type in directory name
     let mut album_lookup: HashMap<(String, String), Album> = HashMap::new();
     file_paths.iter().for_each(|mp| {
         let album = path_to_details(mp.into(), root.to_path_buf());
