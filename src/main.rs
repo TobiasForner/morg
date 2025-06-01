@@ -1,6 +1,26 @@
-use std::{collections::HashMap, io::BufWriter, path::PathBuf, str::FromStr};
+use anyhow::{Context, Result, bail};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::read_dir,
+    io::BufWriter,
+    path::{Component, Path, PathBuf},
+    str::FromStr,
+};
 
 use adb_client::{ADBDeviceExt, ADBServer};
+use clap::Parser;
+use pathdiff::diff_paths;
+
+const IMAGE_EXTENSIONS: [&str; 2] = ["jpg", "png"];
+const MUSIC_EXTENSIONS: [&str; 3] = ["mp3", "flac", "wav"];
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Sets a custom config file
+    #[arg(short, long, value_name = "PATH")]
+    path: PathBuf,
+}
 
 #[derive(Debug)]
 struct Album {
@@ -27,87 +47,169 @@ impl Album {
             cover_file,
         }
     }
+
+    fn merge_with(&self, other: &Album) -> Result<Album> {
+        if self.title == other.title
+            && self.artist == other.artist
+            && self.dir_path == other.dir_path
+        {
+            let mut tracks = HashSet::new();
+            self.tracks.iter().for_each(|t| {
+                tracks.insert(t.to_string());
+            });
+            other.tracks.iter().for_each(|t| {
+                tracks.insert(t.to_string());
+            });
+            let mut tracks: Vec<String> = tracks.into_iter().collect();
+            tracks.sort();
+            let cover_files: Vec<PathBuf> = self
+                .cover_file
+                .iter()
+                .chain(other.cover_file.iter())
+                .cloned()
+                .collect();
+            let cover_file = if cover_files.is_empty() {
+                None
+            } else if cover_files.len() == 1 || cover_files[0] == cover_files[1] {
+                Some(cover_files[0].clone())
+            } else {
+                bail!("Failed to merge {self:?} and {other:?}!");
+            };
+            Ok(Album::new(
+                self.title.clone(),
+                self.artist.clone(),
+                tracks,
+                self.dir_path.clone(),
+                cover_file,
+            ))
+        } else {
+            bail!("Failed to merge {self:?} and {other:?}!")
+        }
+    }
 }
 
 fn main() {
-    //    let vendor_id = 0x22d9;
-    //  let product_id = 0x2765;
-    //let mut device = ADBUSBDevice::new(vendor_id, product_id).expect("cannot find device");
+    let args = Cli::parse();
     let mut server = ADBServer::default();
     let devices = server.devices();
 
     println!("devices: {devices:?}");
     let mut device = server.get_device().expect("cannot get device");
-    device.list("/storage/emulated/0/Music/").unwrap();
-    device.list("/storage").unwrap();
-    device.list("Internalshared storage/Music").unwrap();
-    let mut buf = BufWriter::new(Vec::new());
-    let command = vec!["ls", "/storage/emulated/0/Music/"];
-    let _ = device.shell_command(&command, &mut buf);
-    // device.shell(&mut std::io::stdin(), Box::new(std::io::stdout()));
-    let bytes = buf.into_inner().unwrap();
-    let out = String::from_utf8_lossy(&bytes).to_string();
-    println!("{out:?}");
 
     let mut buf = BufWriter::new(Vec::new());
     let command = vec!["find", "/storage/emulated/0/Music", "-type", "f"];
     let _ = device.shell_command(&command, &mut buf);
-    // device.shell(&mut std::io::stdin(), Box::new(std::io::stdout()));
     let bytes = buf.into_inner().unwrap();
     let out = String::from_utf8_lossy(&bytes).to_string();
-    let res: Vec<Vec<String>> = out
+    let music_paths: Vec<PathBuf> = out
         .lines()
-        .map(|l| {
-            let rem = l.replace("/storage/emulated/0/Music/", "");
-            let res: Vec<String> = rem.split('/').map(|s| s.to_string()).collect();
-            res
+        .map(|l| PathBuf::from_str(l).expect("each line should be a valid path!"))
+        .collect();
+    let pb = PathBuf::from_str("/storage/emulated/0/Music").unwrap();
+    let albums = group_files_into_albums(&music_paths, pb.as_path());
+    albums.iter().for_each(|a| println!("{a:?}"));
+
+    println!("\n\n\n ==========");
+    let albums = albums_in_dir(&args.path);
+    albums.iter().for_each(|a| println!("{a:?}"));
+}
+
+fn group_files_into_albums(file_paths: &[PathBuf], root: &Path) -> Vec<Album> {
+    let mut album_lookup: HashMap<(String, String), Album> = HashMap::new();
+    file_paths.iter().for_each(|mp| {
+        let album = path_to_details(mp.into(), root.to_path_buf());
+        if let Ok(album) = album {
+            if let Some(a) = album_lookup.get(&(album.artist.clone(), album.title.clone())) {
+                let merged = album.merge_with(a);
+                if let Ok(merged) = merged {
+                    album_lookup.insert((album.artist.clone(), album.title.clone()), merged);
+                } else {
+                    println!("ERROR: {merged:?}");
+                }
+            } else {
+                album_lookup.insert((album.artist.clone(), album.title.clone()), album);
+            };
+        }
+    });
+    album_lookup.into_values().collect()
+}
+
+fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {
+    let rel = diff_paths(&path, &root_dir).expect("path must be a child of root_dir!");
+    let parts: Vec<String> = rel
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(name) => name.to_str().map(|s| s.to_string()),
+            _ => None,
         })
         .collect();
-    let mut out = String::new();
-    let mut album_to_files: HashMap<(String, String), Vec<String>> = HashMap::new();
-    res.iter().for_each(|parts| {
-        if parts.len() == 3 {
-            let artist = parts[0].clone();
-            let album = parts[1].clone();
-            let track = parts[2].clone();
-            if let Some(tracks) = album_to_files.get_mut(&(artist, album)) {
-                tracks.push(track);
-            } else {
-                album_to_files.insert((parts[0].clone(), parts[1].clone()), vec![track]);
+
+    let (artist, album, file) = if parts.len() == 3 {
+        (parts[0].clone(), parts[1].clone(), parts[2].clone())
+    } else if parts.len() > 3 {
+        let artist = parts[0].clone();
+        let album = parts[1..parts.len() - 1].join(" - ");
+        let track = parts[parts.len() - 1].clone();
+        (artist, album, track)
+    } else if parts.len() == 2 {
+        let artist = parts[0].clone();
+        let rest = parts[1].replace(&format!("{artist} - "), "");
+        if let Some((album, track)) = rest.rsplit_once(" - ") {
+            (artist, album.to_string(), track.to_string())
+        } else {
+            bail!("Expected ' - ' delimiter between album name and track, but got {parts:?}");
+        }
+    } else {
+        bail!("Could not parse details from {path:?}!");
+    };
+    let cover_file = if is_image(&path) {
+        Some(file.clone().into())
+    } else {
+        None
+    };
+    let mut tracks = vec![];
+    if is_music(&path) {
+        tracks.push(file);
+    }
+    let dir_path = path
+        .parent()
+        .context("file should have a parent!")?
+        .to_path_buf();
+    Ok(Album::new(album, artist, tracks, dir_path, cover_file))
+}
+
+fn is_image(file: &Path) -> bool {
+    let Some(ext) = file.extension() else {
+        return false;
+    };
+    IMAGE_EXTENSIONS.iter().any(|e| ext == *e)
+}
+
+fn is_music(file: &Path) -> bool {
+    let Some(ext) = file.extension() else {
+        return false;
+    };
+    MUSIC_EXTENSIONS.iter().any(|e| ext == *e)
+}
+
+fn files_in_dir(root: &Path) -> Vec<PathBuf> {
+    let mut res = vec![];
+    read_dir(root).expect("").for_each(|de| {
+        let de = de.unwrap();
+        if let Ok(ft) = de.file_type() {
+            if ft.is_file() {
+                res.push(de.path().to_path_buf());
+            } else if ft.is_dir() {
+                let mut rec = files_in_dir(&de.path());
+
+                res.append(&mut rec);
             }
         }
     });
+    res
+}
 
-    res.iter().for_each(|parts| {
-        let tmp = parts.join(", ");
-        out.push_str(&tmp);
-        out.push('\n');
-    });
-    println!("{out}");
-
-    let albums: Vec<Album> = album_to_files
-        .into_iter()
-        .map(|((artist, album), files)| {
-            let dir_path = format!("/storage/emulated/0/Music/{artist}/{album}");
-            let mut cover_file: Option<PathBuf> = None;
-            let mut tracks = vec![];
-            files.into_iter().for_each(|f| {
-                if [".jpg"].iter().any(|ext| f.ends_with(ext)) {
-                    if cover_file.is_none() {
-                        cover_file = Some(PathBuf::from_str(&f).expect("Should be a valid path!"));
-                    }
-                } else if [".mp3", ".wav", ".flac"].iter().any(|ext| f.ends_with(ext)) {
-                    tracks.push(f);
-                }
-            });
-            Album::new(
-                album,
-                artist,
-                tracks,
-                PathBuf::from_str(&dir_path).expect("Should be a valid path!"),
-                cover_file,
-            )
-        })
-        .collect();
-    albums.iter().for_each(|a| println!("{a:?}"));
+fn albums_in_dir(root: &Path) -> Vec<Album> {
+    let files = files_in_dir(root);
+    group_files_into_albums(&files, root)
 }

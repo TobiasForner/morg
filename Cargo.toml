@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 adb_client = "2.1.13"
+anyhow = "1.0.98"
+clap = { version = "4.5.39", features = ["derive"] }
+pathdiff = "0.2.3"
