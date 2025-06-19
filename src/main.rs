@@ -172,7 +172,6 @@ fn run() -> Result<()> {
 }
 
 fn group_files_into_albums(file_paths: &[PathBuf], root: &Path) -> Vec<Album> {
-    // TODO: handle potential trailing file type in directory name
     let mut album_lookup: HashMap<(String, String), Album> = HashMap::new();
     file_paths.iter().for_each(|mp| {
         let album = path_to_details(mp.into(), root.to_path_buf());
@@ -220,6 +219,16 @@ fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {
     } else {
         bail!("Could not parse details from {path:?}!");
     };
+
+    let mut album = album.trim().to_string();
+    if let Some(ext) = MUSIC_EXTENSIONS
+        .iter()
+        .flat_map(|ext| [ext.to_string(), ext.to_uppercase()])
+        .find(|ext| album.ends_with(&format!("[{ext}]")))
+    {
+        album = album.replace(&format!("[{ext}]"), "").trim().to_string();
+    }
+
     let cover_file = if is_image(&path) {
         Some(file.clone().into())
     } else {
@@ -233,7 +242,13 @@ fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {
         .parent()
         .context("file should have a parent!")?
         .to_path_buf();
-    Ok(Album::new(album, artist, tracks, dir_path, cover_file))
+    Ok(Album::new(
+        album.to_string(),
+        artist,
+        tracks,
+        dir_path,
+        cover_file,
+    ))
 }
 
 fn is_image(file: &Path) -> bool {
