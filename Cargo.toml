@@ -7,4 +7,7 @@ edition = "2024"
 adb_client = "2.1.13"
 anyhow = "1.0.98"
 clap = { version = "4.5.39", features = ["derive"] }
+directories = "6.0.0"
 pathdiff = "0.2.3"
+serde = "1.0.219"
+toml = "0.8.23"
