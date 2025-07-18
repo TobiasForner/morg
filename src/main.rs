@@ -259,7 +259,6 @@ fn run() -> Result<()> {
                 }
                 AddSource { directory } => {
                     let mut config = DirConfig::read()?;
-
                     config.source_directories.push(directory);
                     config.write()?;
                 }
