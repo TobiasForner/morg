@@ -711,18 +711,20 @@ fn is_music(file: &Path) -> bool {
 
 fn files_in_dir(root: &Path) -> Vec<PathBuf> {
     let mut res = vec![];
-    read_dir(root).expect("").for_each(|de| {
-        let de = de.unwrap();
-        if let Ok(ft) = de.file_type() {
-            if ft.is_file() {
-                res.push(de.path().to_path_buf());
-            } else if ft.is_dir() {
-                let mut rec = files_in_dir(&de.path());
+    read_dir(root)
+        .unwrap_or_else(|_| panic!("root directory {root:?} does not exist!"))
+        .for_each(|de| {
+            let de = de.unwrap();
+            if let Ok(ft) = de.file_type() {
+                if ft.is_file() {
+                    res.push(de.path().to_path_buf());
+                } else if ft.is_dir() {
+                    let mut rec = files_in_dir(&de.path());
 
-                res.append(&mut rec);
+                    res.append(&mut rec);
+                }
             }
-        }
-    });
+        });
     res
 }
 
