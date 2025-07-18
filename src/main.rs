@@ -565,6 +565,7 @@ fn ensure_album_is_in_dir(
         if allow_any
             && fs_extra::copy_items(&[&src_album.dir_path], dest_artist_dir, &copy_options).is_ok()
         {
+            println!("Copied over wav files as fallback to any filetype is allowed");
             return Some(FileType::Wav);
         }
     } else if let Some((src_album, _src)) = album_lookup.get(&(
@@ -577,6 +578,7 @@ fn ensure_album_is_in_dir(
         if allow_any
             && fs_extra::copy_items(&[&src_album.dir_path], dest_artist_dir, &copy_options).is_ok()
         {
+            println!("Copied over mp3 files as fallback to any filetype is allowed");
             return Some(FileType::MP3);
         }
     }
