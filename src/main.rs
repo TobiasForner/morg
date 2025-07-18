@@ -312,9 +312,9 @@ fn run() -> Result<()> {
     }
 }
 
-fn sync_to_dir(dir_path: &Path, ft: &FileType, config: &DirConfig, allow_any: bool) {
+fn sync_to_dir(dest_dir: &Path, ft: &FileType, config: &DirConfig, allow_any: bool) {
     let album_lookup = create_source_album_lookup(&config.source_directories);
-    let albums = albums_in_dir(dir_path);
+    let albums = albums_in_dir(dest_dir);
     let mut albums_in_dir = HashSet::new();
 
     // try to replace albums with proper filetypes
@@ -365,10 +365,7 @@ fn sync_to_dir(dir_path: &Path, ft: &FileType, config: &DirConfig, allow_any: bo
                 .iter()
                 .any(|(at, aa, _)| at == album_title && *aa == *album.artist)
             {
-                let dest_album_dir =
-                    get_album_dir(dir_path, album).expect("Album dir must be created successfully");
-                let res =
-                    ensure_album_is_in_dir(album, ft, &album_lookup, &dest_album_dir, allow_any);
+                let res = ensure_album_is_in_dir(album, ft, &album_lookup, dest_dir, allow_any);
                 if let Some(ft) = res {
                     albums_in_dir.insert((
                         album_title.to_string(),
@@ -696,16 +693,6 @@ fn adb_copy_album(src_album: &Album, device: &mut ADBServerDevice) {
         let full_track_dst = format!("{adb_album_dir}/{tf}");
         let _ = device.push(&mut input, &full_track_dst);
     });
-}
-
-fn get_album_dir(root_dir: &Path, album: &Album) -> Result<PathBuf> {
-    let album_dir = root_dir
-        .join(&album.artist)
-        .join(album.title_without_filetype());
-    if !album_dir.exists() {
-        std::fs::create_dir_all(&album_dir)?;
-    }
-    Ok(album_dir)
 }
 
 fn del_album_on_device(adb_album: &Album, device: &mut ADBServerDevice) {
