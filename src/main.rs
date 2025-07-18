@@ -292,6 +292,9 @@ fn run() -> Result<()> {
 fn sync_to_dir(dir_path: &Path, ft: &FileType, config: &DirConfig) {
     let album_lookup = create_source_album_lookup(&config.source_directories);
     let albums = albums_in_dir(dir_path);
+    let mut albums_in_dir = HashSet::new();
+
+    // try to replace albums with proper filetypes
     albums.iter().for_each(|a| {
         if let Some(aft) = a.file_type()
             && aft != *ft
@@ -309,6 +312,7 @@ fn sync_to_dir(dir_path: &Path, ft: &FileType, config: &DirConfig) {
                 println!("copying {:?} to {:?}!", src_album.dir_path, a.dir_path);
                 let copy_options = CopyOptions::new();
                 let _ = fs_extra::copy_items(&[&src_album.dir_path], &a.dir_path, &copy_options);
+                albums_in_dir.insert((a.title.clone(), a.artist.clone(), ft.clone()));
             } else if let Some((src_album, src)) =
                 album_lookup.get(&(a.title.clone(), a.artist.clone(), FileType::Flac))
             {
@@ -317,6 +321,7 @@ fn sync_to_dir(dir_path: &Path, ft: &FileType, config: &DirConfig) {
                     println!("Deleting {:?}!", a.dir_path);
                     let _ = std::fs::remove_dir_all(&a.dir_path);
                     println!("copying {:?} to {:?}!", src_album.dir_path, a.dir_path);
+                    albums_in_dir.insert((a.title.clone(), a.artist.clone(), ft.clone()));
                 }
             } else if let Some((src_album, _src)) =
                 album_lookup.get(&(a.title.clone(), a.artist.clone(), FileType::Wav))
@@ -324,8 +329,29 @@ fn sync_to_dir(dir_path: &Path, ft: &FileType, config: &DirConfig) {
                 println!("Found wav source album {src_album:?}");
                 println!("NOT IMPLEMENTED: Album conversion wav => mp3");
             }
+        } else {
+            albums_in_dir.insert((a.title.clone(), a.artist.clone(), ft.clone()));
         }
     });
+    // copy over missing albums
+    let album_lookup = create_source_album_lookup(&config.source_directories);
+    album_lookup
+        .iter()
+        .for_each(|((album_title, album_artist, _), (album, _))| {
+            if !albums_in_dir
+                .iter()
+                .any(|(at, aa, _)| at == album_title && *aa == *album.artist)
+            {
+                let dest_album_dir =
+                    get_album_dir(dir_path, album).expect("Album dir must be created successfully");
+                ensure_album_is_in_dir(album, ft, &album_lookup, &dest_album_dir);
+                albums_in_dir.insert((
+                    album_title.to_string(),
+                    album_artist.to_string(),
+                    ft.clone(),
+                ));
+            }
+        });
 }
 
 fn sync_to_device(ft: &FileType, config: &DirConfig) {
@@ -457,6 +483,44 @@ fn ensure_album_is_on_device(
     false
 }
 
+/// simply copies the album files (files in the album's directory) to the directory in the desired file type
+/// does NOT delete any files
+fn ensure_album_is_in_dir(
+    src_album: &Album,
+    dest_ft: &FileType,
+    album_lookup: &HashMap<(String, String, FileType), (Album, PathBuf)>,
+    dest_album_dir: &PathBuf,
+) -> bool {
+    let copy_options = CopyOptions::new();
+    if let Some((src_album, _src)) = album_lookup.get(&(
+        src_album.title_without_filetype(),
+        src_album.artist.clone(),
+        dest_ft.clone(),
+    )) {
+        println!("Found source album {src_album:?}");
+        let _ = fs_extra::copy_items(&[&src_album.dir_path], dest_album_dir, &copy_options);
+        return true;
+    } else if let Some((src_album, src)) = album_lookup.get(&(
+        src_album.title_without_filetype(),
+        src_album.artist.clone(),
+        FileType::Flac,
+    )) {
+        println!("Found Flac source album {src_album:?}");
+        if let Ok(src_album) = convert_src_album(src, src_album, dest_ft) {
+            let _ = fs_extra::copy_items(&[&src_album.dir_path], dest_album_dir, &copy_options);
+            return true;
+        }
+    } else if let Some((src_album, _src)) = album_lookup.get(&(
+        src_album.title_without_filetype(),
+        src_album.artist.clone(),
+        FileType::Wav,
+    )) {
+        println!("Found wav source album {src_album:?}");
+        println!("NOT IMPLEMENTED: Album conversion wav => mp3");
+    }
+    false
+}
+
 fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Result<Album> {
     let desired_ft = dest_ft.to_possible_value().expect("");
     let desired_ft = desired_ft.get_name();
@@ -567,6 +631,16 @@ fn adb_copy_album(src_album: &Album, device: &mut ADBServerDevice) {
         let full_track_dst = format!("{adb_album_dir}/{tf}");
         let _ = device.push(&mut input, &full_track_dst);
     });
+}
+
+fn get_album_dir(root_dir: &Path, album: &Album) -> Result<PathBuf> {
+    let album_dir = root_dir
+        .join(&album.artist)
+        .join(album.title_without_filetype());
+    if !album_dir.exists() {
+        std::fs::create_dir_all(&album_dir)?;
+    }
+    Ok(album_dir)
 }
 
 fn del_album_on_device(adb_album: &Album, device: &mut ADBServerDevice) {
