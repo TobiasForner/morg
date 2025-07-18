@@ -3,7 +3,6 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
-    fmt::format,
     fs::{File, read_dir},
     io::BufWriter,
     path::{Component, Path, PathBuf},
@@ -310,14 +309,11 @@ fn run() -> Result<()> {
                         let albums = group_files_into_albums(&music_paths, pb.as_path());
                         let mut albums_on_device = HashSet::new();
 
-
-                        let album_lookup = create_source_album_lookup(&config.source_directories);
-
                         albums.iter().for_each(|a| {
                             if let Some(aft) = a.file_type(){
                               if aft != *ft {
                                   println!("Found {a:?} with wrong filetype (is {aft:?}, but should be {ft:?})");
-if let Some((src_album, _src))= album_lookup.get(&(a.title.clone(), a.artist.clone(), ft.clone())){
+if let Some((src_album, _src)) = album_lookup.get(&(a.title.clone(), a.artist.clone(), ft.clone())){
     println!("Found source album {src_album:?}");
     println!("Will attempt to delete album on adb device at {:?}", a.dir_path);
     println!("Deleting {:?} on ADB device!", a.dir_path);
