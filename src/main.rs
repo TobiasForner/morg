@@ -333,7 +333,10 @@ fn sync_to_device(ft: &FileType, config: &DirConfig) {
     let devices = server.devices();
 
     println!("devices: {devices:?}");
-    let mut device = server.get_device().expect("cannot get device");
+    let Ok(mut device) = server.get_device() else {
+        println!("ERROR: failed to get ADB device. Skipping this destination!");
+        return;
+    };
 
     let mut buf = BufWriter::new(Vec::new());
     let command = vec!["find", "/storage/emulated/0/Music", "-type", "f"];
