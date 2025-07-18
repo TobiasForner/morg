@@ -339,7 +339,7 @@ fn sync_to_dir(dest_dir: &Path, ft: &FileType, config: &DirConfig, allow_any: bo
             } else if let Some((src_album, src)) =
                 album_lookup.get(&(a.title.clone(), a.artist.clone(), FileType::Flac))
             {
-                println!("Found Flac source album {src_album:?}");
+                println!("Found Flac source album {src_album:?} in destination {dest_dir:?}");
                 if let Ok(src_album) = convert_src_album(src, src_album, ft) {
                     println!("Deleting {:?}!", a.dir_path);
                     let _ = std::fs::remove_dir_all(&a.dir_path);
@@ -535,9 +535,6 @@ fn ensure_album_is_in_dir(
     allow_any: bool,
 ) -> Result<FileType> {
     let dest_artist_dir = dest_dir.join(&src_album.artist);
-    if !dest_artist_dir.exists() {
-        let _ = std::fs::create_dir_all(&dest_artist_dir);
-    }
     let copy_options = CopyOptions::new();
     if let Some((src_album, _src)) = album_lookup.get(&(
         src_album.title_without_filetype(),
@@ -545,6 +542,9 @@ fn ensure_album_is_in_dir(
         dest_ft.clone(),
     )) {
         println!("Found source album {src_album:?}");
+        if !dest_artist_dir.exists() {
+            let _ = std::fs::create_dir_all(&dest_artist_dir);
+        }
         let _ = fs_extra::copy_items(&[&src_album.dir_path], dest_artist_dir, &copy_options);
         return Ok(dest_ft.clone());
     } else if let Some((src_album, src)) = album_lookup.get(&(
@@ -554,7 +554,10 @@ fn ensure_album_is_in_dir(
     )) {
         println!("Found Flac source album {src_album:?}");
         if let Ok(src_album) = convert_src_album(src, src_album, dest_ft) {
-            let _ = fs_extra::copy_items(&[&src_album.dir_path], dest_artist_dir, &copy_options);
+            if !dest_artist_dir.exists() {
+                let _ = std::fs::create_dir_all(&dest_artist_dir);
+            }
+            fs_extra::copy_items(&[&src_album.dir_path], dest_artist_dir, &copy_options)?;
             return Ok(dest_ft.clone());
         }
     } else if let Some((src_album, _src)) = album_lookup.get(&(
@@ -564,9 +567,11 @@ fn ensure_album_is_in_dir(
     )) {
         println!("Found wav source album {src_album:?}");
         println!("NOT IMPLEMENTED: Album conversion wav => {dest_ft:?}");
-        if allow_any
-            && fs_extra::copy_items(&[&src_album.dir_path], &dest_artist_dir, &copy_options).is_ok()
-        {
+        if allow_any {
+            if !dest_artist_dir.exists() {
+                let _ = std::fs::create_dir_all(&dest_artist_dir);
+            }
+            fs_extra::copy_items(&[&src_album.dir_path], &dest_artist_dir, &copy_options)?;
             println!("Copied over wav files as fallback to any filetype is allowed");
             return Ok(FileType::Wav);
         }
@@ -577,9 +582,11 @@ fn ensure_album_is_in_dir(
     )) {
         println!("Found mp3 source album {src_album:?}");
         println!("NOT IMPLEMENTED: Album conversion mp3 => {dest_ft:?}");
-        if allow_any
-            && fs_extra::copy_items(&[&src_album.dir_path], &dest_artist_dir, &copy_options).is_ok()
-        {
+        if allow_any {
+            if !dest_artist_dir.exists() {
+                let _ = std::fs::create_dir_all(&dest_artist_dir);
+            }
+            fs_extra::copy_items(&[&src_album.dir_path], &dest_artist_dir, &copy_options)?;
             println!("Copied over mp3 files as fallback to any filetype is allowed");
             return Ok(FileType::MP3);
         }
