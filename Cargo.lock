@@ -691,6 +691,7 @@ dependencies = [
  "anyhow",
  "clap",
  "directories",
+ "fs_extra",
  "pathdiff",
  "serde",
  "toml",
