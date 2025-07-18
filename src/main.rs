@@ -11,9 +11,13 @@ use std::{
     str::FromStr,
 };
 
+mod music_tags;
+
 use adb_client::{ADBDeviceExt, ADBServer, ADBServerDevice};
 use clap::{Parser, Subcommand, ValueEnum};
 use pathdiff::diff_paths;
+
+use crate::music_tags::set_artist_tag;
 
 const IMAGE_EXTENSIONS: [&str; 2] = ["jpg", "png"];
 const MUSIC_EXTENSIONS: [&str; 3] = ["mp3", "flac", "wav"];
@@ -35,6 +39,9 @@ enum Commands {
     /// sync files in the sources to the destination directories. If a suitable ADB connection can
     /// be established, the files are also synced to the first ADB device
     Sync,
+    CleanUpTags {
+        dir: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -133,12 +140,12 @@ enum Destination {
 }
 
 #[derive(Clone, Debug)]
-struct Album {
-    title: String,
-    artist: String,
-    tracks: Vec<String>,
-    dir_path: PathBuf,
-    cover_files: Vec<PathBuf>,
+pub struct Album {
+    pub title: String,
+    pub artist: String,
+    pub tracks: Vec<String>,
+    pub dir_path: PathBuf,
+    pub cover_files: Vec<PathBuf>,
 }
 
 impl Album {
@@ -307,6 +314,16 @@ fn run() -> Result<()> {
                         sync_to_device(ft, &config, *allow_any);
                     }
                 });
+            Ok(())
+        }
+        Commands::CleanUpTags { dir } => {
+            let albums = albums_in_dir(&dir);
+            albums.iter().for_each(|a| {
+                let res = set_artist_tag(a);
+                if res.is_err() {
+                    println!("Failed to set tags: {res:?}");
+                }
+            });
             Ok(())
         }
     }
