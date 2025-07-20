@@ -19,15 +19,17 @@ impl Keys {
     fn keys_file() -> Result<PathBuf> {
         let dirs = directories::ProjectDirs::from("TF", "TF", "morg")
             .context("Failed to construct config path!")?;
-        let keys_file = dirs.config_local_dir().join("keys.txt");
+        let keys_file = dirs.config_local_dir().join("keys.toml");
         Ok(keys_file)
     }
     pub fn parse() -> Result<Self> {
         let keys_file = Keys::keys_file()?;
         let text = std::fs::read_to_string(&keys_file)
-            .context(format!("Could not read keys from {keys_file:?}"))?
+            .context(format!(
+                "Could not read {keys_file:?}. Does the file exist?"
+            ))?
             .replace("\r\n", "\n");
-        toml::from_str(&text).context("Could not parse keys")
+        toml::from_str(&text).context("Could not parse keys from {keys_file:?}")
     }
 }
 
