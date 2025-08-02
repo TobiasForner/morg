@@ -1,23 +1,9 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use audiotags::Tag;
 
 use crate::Album;
-/*pub fn set_artist_tag(album: &Album) -> Result<()> {
-    album.tracks.iter().try_for_each(|t| {
-        let track_path = album.dir_path.join(t);
-        let mut tag = Tag::new()
-            .read_from_path(&track_path)
-            .context(format!("Failed to read tags from {track_path:?}"))?;
-        tag.set_album_artist(&album.artist);
-        tag.write_to_path(
-            track_path
-                .to_str()
-                .context("track path should be a valid string")?,
-        )?;
-
-        Ok(())
-    })
-}*/
 
 pub fn set_tags(
     album: &Album,
@@ -47,4 +33,13 @@ pub fn set_tags(
 
         Ok(())
     })
+}
+
+pub fn get_track_tags(
+    abs_track_path: &PathBuf,
+) -> Result<Box<dyn audiotags::AudioTag + 'static + Send + Sync>> {
+    let res = Tag::new()
+        .read_from_path(abs_track_path)
+        .context(format!("Failed to read tags from {abs_track_path:?}"));
+    res
 }

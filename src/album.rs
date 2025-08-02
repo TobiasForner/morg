@@ -1,8 +1,10 @@
 use crate::FileType;
 use crate::IMAGE_EXTENSIONS;
 use crate::MUSIC_EXTENSIONS;
+use crate::music_tags::get_track_tags;
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
+use counter::Counter;
 use pathdiff::diff_paths;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -109,6 +111,24 @@ impl Album {
             bail!("Failed to merge {self:?} and {other:?}!")
         }
     }
+
+    fn finalize(&mut self) {
+        let mut artists_counts: Counter<String> = Counter::new();
+        self.tracks.iter().for_each(|t| {
+            let track_path = self.dir_path.join(t);
+            if let Ok(tags) = get_track_tags(&track_path)
+                && let Some(artist) = tags.album_artist()
+            {
+                let artist = artist.to_string();
+                artists_counts[&artist] += 1;
+            }
+        });
+
+        let mc = artists_counts.most_common();
+        if !mc.is_empty() {
+            self.artist = mc[0].1.to_string();
+        }
+    }
 }
 
 pub fn create_source_album_lookup(
@@ -149,7 +169,13 @@ pub fn group_files_into_albums(file_paths: &[PathBuf], root: &Path) -> Vec<Album
             }
         }
     });
-    album_lookup.into_values().collect()
+    album_lookup
+        .into_values()
+        .map(|mut a| {
+            a.finalize();
+            a
+        })
+        .collect()
 }
 
 pub fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {

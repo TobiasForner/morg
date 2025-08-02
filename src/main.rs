@@ -494,7 +494,7 @@ fn ensure_album_is_in_dir(
     dest_dir: &Path,
     allow_any: bool,
 ) -> Result<FileType> {
-    let dest_artist_dir = dest_dir.join(&src_album.artist);
+    let dest_artist_dir = artist_dir(dest_dir, &src_album.artist);
     let copy_options = CopyOptions::new();
     if let Some((src_album, _src)) = album_lookup.get(&(
         src_album.title_without_filetype(),
@@ -561,7 +561,7 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     let desired_ft = dest_ft.to_possible_value().expect("");
     let desired_ft = desired_ft.get_name();
     // create album dir
-    let src_artist_dir = src.join(&src_album.artist);
+    let src_artist_dir = artist_dir(src, &src_album.artist);
     if !src_artist_dir.exists() {
         let _ = std::fs::create_dir(&src_artist_dir);
     }
@@ -634,9 +634,20 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     }
 }
 
+fn artist_dir(root: &Path, artist: &str) -> PathBuf {
+    root.join(normalize_artist(artist))
+}
+
+fn normalize_artist(artist: &str) -> String {
+    artist.replace("/", " ")
+}
+
 fn adb_copy_album(src_album: &Album, device: &mut ADBServerDevice) {
     // check whether artist dir exists on device
-    let adb_artist_dir = format!("/storage/emulated/0/Music/{}", src_album.artist);
+    let adb_artist_dir = format!(
+        "/storage/emulated/0/Music/{}",
+        normalize_artist(&src_album.artist)
+    );
     if !dir_exists_on_adb_device(device, &adb_artist_dir) {
         let mut buf = BufWriter::new(Vec::new());
         let adb_dir_s = format!("\"{adb_artist_dir}\"");
