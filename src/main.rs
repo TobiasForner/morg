@@ -43,12 +43,11 @@ enum Commands {
     /// sync files in the sources to the destination directories. If a suitable ADB connection can
     /// be established, the files are also synced to the first ADB device
     Sync,
-    CleanUpTags {
-        dir: PathBuf,
-    },
-    FillInCoverFiles {
-        dir: PathBuf,
-    },
+    /// Uses discogs to set music tags (metadata)
+    CleanUpTags { dir: PathBuf },
+    /// Uses discogs to download cover files. The cover files will be stored in the album directory
+    FillInCoverFiles { dir: PathBuf },
+    /// Just for internal testing purposes
     Test,
 }
 
@@ -59,6 +58,7 @@ enum ConfigCommands {
         #[arg()]
         directory: PathBuf,
     },
+    /// Add an ADB source
     AddADB {
         ft: FileType,
         #[clap(default_value_t = false)]
@@ -72,6 +72,7 @@ enum ConfigCommands {
         #[clap(default_value_t = false)]
         allow_any: bool,
     },
+    /// Prints the config file location
     PrintFile,
 }
 
