@@ -126,7 +126,7 @@ impl Album {
 
         let mc = artists_counts.most_common();
         if !mc.is_empty() {
-            self.artist = mc[0].1.to_string();
+            self.artist = mc[0].0.to_string();
         }
     }
 }
