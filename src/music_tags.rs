@@ -38,8 +38,7 @@ pub fn set_tags(
 pub fn get_track_tags(
     abs_track_path: &PathBuf,
 ) -> Result<Box<dyn audiotags::AudioTag + 'static + Send + Sync>> {
-    let res = Tag::new()
+    Tag::new()
         .read_from_path(abs_track_path)
-        .context(format!("Failed to read tags from {abs_track_path:?}"));
-    res
+        .context(format!("Failed to read tags from {abs_track_path:?}"))
 }
