@@ -800,7 +800,8 @@ fn adb_copy_album(src_album: &Album, device: &mut ADBServerDevice) {
     });
     src_album.tracks.iter().for_each(|tf| {
         let full_track_file = src_album.dir_path.join(tf);
-        let mut input = File::open(full_track_file).expect("Cannot open track file");
+        let mut input = File::open(&full_track_file)
+            .unwrap_or_else(|_| panic!("Cannot open track file {full_track_file:?}"));
         let full_track_dst = format!("{adb_album_dir}/{tf}");
         let _ = device.push(&mut input, &full_track_dst);
     });
