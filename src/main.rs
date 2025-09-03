@@ -254,10 +254,13 @@ fn run() -> Result<()> {
         }
         Commands::FillInCoverFiles { dir } => {
             let mut albums = albums_in_dir(&dir);
-            albums.iter_mut().for_each(|a| {
-                if a.cover_files.is_empty() {
+            albums
+                .iter_mut()
+                .filter(|a| a.cover_files.is_empty())
+                .for_each(|a| {
                     let res = download_cover_file(a);
                     if let Ok(limit) = res {
+                        println!("Downloaded cover file for {a:?}");
                         if limit <= 1 {
                             println!("Waiting 60s to avoid rate limit...");
 
@@ -266,8 +269,7 @@ fn run() -> Result<()> {
                     } else {
                         println!("Failed to download cover file: {res:?}");
                     }
-                }
-            });
+                });
             Ok(())
         }
     }
