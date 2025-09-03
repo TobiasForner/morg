@@ -69,8 +69,8 @@ fn get_album_json(album: &Album) -> Result<(JsonValue, i32)> {
     {
         limit = rl.parse().expect("rate limit should be a valid i32");
     }
-    let content = runtime.block_on(res.text());
-    let parsed = json::parse(&content.unwrap()).unwrap();
+    let content = runtime.block_on(res.text())?;
+    let parsed = json::parse(&content)?;
 
     let search_title = format!("{} - {}", album.artist, album.title);
     parsed["results"]
@@ -92,6 +92,7 @@ fn get_album_json(album: &Album) -> Result<(JsonValue, i32)> {
 
 pub fn download_cover_file(album: &mut Album) -> Result<i32> {
     let result = get_album_json(album);
+
     if let Ok((result, limit)) = result {
         if result.has_key("cover_image") {
             let cover_url = result["cover_image"]
@@ -101,6 +102,7 @@ pub fn download_cover_file(album: &mut Album) -> Result<i32> {
                 .rsplit_once(".")
                 .context("Failed to determine cover file extension for {cover_url:?}")?;
             let cover_path = album.dir_path.join(format!("cover.{}", ext.1));
+            println!("Downloading {cover_url} to {cover_path:?}");
             let mut file = std::fs::File::create(cover_path)?;
             reqwest::blocking::get(cover_url)?.copy_to(&mut file)?;
         }
