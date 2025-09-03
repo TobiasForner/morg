@@ -46,7 +46,11 @@ enum Commands {
     /// Uses discogs to set music tags (metadata)
     CleanUpTags { dir: PathBuf },
     /// Uses discogs to download cover files. The cover files will be stored in the album directory
-    FillInCoverFiles { dir: PathBuf },
+    FillInCoverFiles {
+        dir: PathBuf,
+        #[arg(short, long)]
+        overwrite: bool,
+    },
     /// Just for internal testing purposes
     Test,
 }
@@ -252,11 +256,11 @@ fn run() -> Result<()> {
             });
             Ok(())
         }
-        Commands::FillInCoverFiles { dir } => {
+        Commands::FillInCoverFiles { dir, overwrite } => {
             let mut albums = albums_in_dir(&dir);
             albums
                 .iter_mut()
-                .filter(|a| a.cover_files.is_empty())
+                .filter(|a| overwrite || a.cover_files.is_empty())
                 .for_each(|a| {
                     let res = download_cover_file(a);
                     if let Ok(limit) = res {
