@@ -692,67 +692,85 @@ fn ensure_album_is_in_dir(
 fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Result<Album> {
     let desired_ft = dest_ft.to_possible_value().expect("");
     let desired_ft = desired_ft.get_name();
-    // create album dir
-    let src_artist_dir = artist_dir(src, &src_album.artist);
-    if !src_artist_dir.exists() {
-        let _ = std::fs::create_dir(&src_artist_dir);
-    }
 
+    let src_artist_dir = artist_dir(src, &src_album.artist);
+    // create album dir
     let new_src_album_dir = src_artist_dir.join(format!("{} [{}]", src_album.title, &desired_ft));
     // copy over cover files
-    src_album.cover_files.iter().for_each(|cf| {
-        let cf_name = cf.file_name().expect("cover files muts have a file name!");
-        let cf_dest = new_src_album_dir.join(cf_name);
-        println!("COPY: {cf:?} -> {cf_dest:?}");
-        let r = std::fs::copy(cf, src_artist_dir.join(cf_name));
-        if r.is_err() {
-            println!("copy failed!");
+
+    let create_album_dirs = || {
+        if !new_src_album_dir.exists() {
+            let _ = std::fs::create_dir(&src_artist_dir);
         }
-    });
-    // create converted files in correct dir
-    if !new_src_album_dir.exists() {
-        let _ = std::fs::create_dir(&new_src_album_dir);
-    }
+        // create converted files in correct dir
+        if !new_src_album_dir.exists() {
+            let _ = std::fs::create_dir(&new_src_album_dir);
+        }
+    };
+
+    let copy_cover_files = || {
+        src_album.cover_files.iter().for_each(|cf| {
+            let cf_name = cf.file_name().expect("cover files muts have a file name!");
+            let cf_dest = new_src_album_dir.join(cf_name);
+            println!("COPY: {cf:?} -> {cf_dest:?}");
+            let r = std::fs::copy(cf, src_artist_dir.join(cf_name));
+            if r.is_err() {
+                println!("copy failed!");
+            }
+        });
+    };
     let mut new_tracks = vec![];
-    src_album.tracks.iter().for_each(|t| {
-        let full_path = src_album.dir_path.join(t);
-        let t_new = t.replace(".flac", &format!(".{desired_ft}"));
-        let dst_path = new_src_album_dir.join(&t_new);
-        println!("Track: {full_path:?} --> {dst_path:?}");
-        match dest_ft {
-            FileType::MP3 => {
-                // TODO: invesigate whether/which other commands are required for different combinations of src and
-                // dest filetypes
-                Command::new("ffmpeg")
-                    .args([
-                        "-i",
-                        full_path.to_str().expect(""),
-                        "-ab",
-                        "320k",
-                        "-map_metadata",
-                        "0",
-                        "-id3v2_version",
-                        "3",
-                        dst_path.to_str().expect(""),
-                    ])
-                    .output()
-                    .expect("failed to convert {full_path:?}");
-                let track = dst_path
-                    .file_name()
-                    .expect("Destination music file should have a file_name")
-                    .to_str()
-                    .expect("")
-                    .to_string();
-                new_tracks.push(track);
-            }
-            _ => {
-                println!(
-                    "TODO: implement conversion {:?} --> {dest_ft:?}",
-                    src_album.file_type()
-                );
-            }
+    match src_album.file_type() {
+        Some(FileType::Flac) => {
+            src_album.tracks.iter().for_each(|t| {
+                let full_path = src_album.dir_path.join(t);
+                let t_new = t.replace(".flac", &format!(".{desired_ft}"));
+                let dst_path = new_src_album_dir.join(&t_new);
+                println!("Track: {full_path:?} --> {dst_path:?}");
+                match dest_ft {
+                    FileType::MP3 => {
+                        create_album_dirs();
+                        copy_cover_files();
+                        // TODO: invesigate whether/which other commands are required for different combinations of src and
+                        // dest filetypes
+                        Command::new("ffmpeg")
+                            .args([
+                                "-i",
+                                full_path.to_str().expect(""),
+                                "-ab",
+                                "320k",
+                                "-map_metadata",
+                                "0",
+                                "-id3v2_version",
+                                "3",
+                                dst_path.to_str().expect(""),
+                            ])
+                            .output()
+                            .expect("failed to convert {full_path:?}");
+                        let track = dst_path
+                            .file_name()
+                            .expect("Destination music file should have a file_name")
+                            .to_str()
+                            .expect("")
+                            .to_string();
+                        new_tracks.push(track);
+                    }
+                    _ => {
+                        println!(
+                            "TODO: implement conversion {:?} --> {dest_ft:?}",
+                            src_album.file_type()
+                        );
+                    }
+                }
+            });
         }
-    });
+        _ => {
+            println!(
+                "TODO: implement conversion {:?} --> {dest_ft:?}",
+                src_album.file_type()
+            );
+        }
+    }
     if new_tracks.len() == src_album.tracks.len() {
         Ok(Album::new(
             src_album.title.clone(),
