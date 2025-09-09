@@ -16,10 +16,14 @@ pub fn set_tags(
         let mut tag = Tag::new()
             .read_from_path(&track_path)
             .context(format!("Failed to read tags from {track_path:?}"))?;
-        if let Some(title) = title {
+        if let Some(title) = title
+            && !title.trim().is_empty()
+        {
             tag.set_album_title(title);
         }
-        if let Some(artist) = artist {
+        if let Some(artist) = artist
+            && !artist.trim().is_empty()
+        {
             tag.set_album_artist(artist);
         }
         if let Some(year) = year {
