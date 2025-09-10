@@ -39,4 +39,4 @@ Use `cargo run -- --help` to get an overview of the available commands
 
 ## Build
 `cargo build --release`
-Copy the generated executable file whereever you prefer.
+Copy the generated executable file wherever you prefer.
