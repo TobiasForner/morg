@@ -13,17 +13,17 @@ The tool uses discogs to complete music meta data.
 Your music source is setup like this:
 ```
 root_dir
-    |- Artist name
-        |- album 1
-            |- song1.mp3
-            |- song2.mp3
-            |- ...
-            |- cover.png [optional]
-        |- album 2
-    |- Artist name - Album Name [MP3]
-        |- song files (should be mp3)
-        | cover.png [optional]
-    |- Artist name - Album Name 
+├── Artist name
+│   ├── album 1
+│   │   ├── song1.mp3
+│   │   ├── song2.mp3
+│   │   ├── ...
+│   │   └── cover.png [optional]
+│   └── album 2
+├── Artist name - Album Name [MP3]
+│   ├── song files (should be mp3)
+│   └── cover.png [optional]
+└── Artist name - Album Name 
     
 ```
 - One root directory
