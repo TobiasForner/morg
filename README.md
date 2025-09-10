@@ -3,7 +3,7 @@ Opinionated tool to organize music on your devices. You can setup a repository o
 The tool uses discogs to complete music meta data.
 
 ## Features
-- config via `toml`
+- configuration via `toml`
 - one source, multiple destinations (including an ADB device if it can be discovered)
 - filetype preferences for each destination
 - config manipulation via CLI
