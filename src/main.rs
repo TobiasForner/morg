@@ -25,7 +25,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::music_info::download_cover_file;
 
-const IMAGE_EXTENSIONS: [&str; 2] = ["jpg", "png"];
+const IMAGE_EXTENSIONS: [&str; 3] = ["jpeg", "jpg", "png"];
 const MUSIC_EXTENSIONS: [&str; 3] = ["mp3", "flac", "wav"];
 
 #[derive(Parser)]
