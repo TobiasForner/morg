@@ -557,50 +557,24 @@ fn ensure_album_is_on_device(
     device: &mut ADBServerDevice,
     allow_any: bool,
 ) -> Option<FileType> {
-    println!("Copying source album {} to device", src_album.overview());
-    if let Some((src_album, _src)) = album_lookup.get(&(
-        src_album.title_without_filetype(),
-        src_album.artist.clone(),
-        dest_ft.clone(),
-    )) {
-        println!("Found source album {}", src_album.overview());
-        adb_copy_album(src_album, device);
-        return Some(dest_ft.clone());
-    } else if let Some((src_album, src)) = album_lookup.get(&(
-        src_album.title_without_filetype(),
-        src_album.artist.clone(),
-        FileType::Flac,
-    )) {
-        println!("Found Flac source album {}", src_album.overview());
-        if convert_src_album(src, src_album, dest_ft).is_ok() {
-            adb_copy_album(src_album, device);
-            return Some(dest_ft.clone());
-        }
-    } else if let Some((src_album, _src)) = album_lookup.get(&(
-        src_album.title_without_filetype(),
-        src_album.artist.clone(),
-        FileType::Wav,
-    )) {
-        println!("Found wav source album {}", src_album.overview());
-        println!("NOT IMPLEMENTED: Album conversion wav => {dest_ft:?}");
-        if allow_any {
-            adb_copy_album(src_album, device);
-            return Some(FileType::Wav.clone());
-        }
-    } else if let Some((src_album, _src)) = album_lookup.get(&(
-        src_album.title_without_filetype(),
-        src_album.artist.clone(),
-        FileType::MP3,
-    )) {
-        println!("Found mp3 source album {src_album:?}");
-        println!("NOT IMPLEMENTED: Album conversion mp3 => {dest_ft:?}");
-        if allow_any {
-            adb_copy_album(src_album, device);
-            return Some(FileType::MP3.clone());
-        }
-    }
+    println!(
+        "Copying missing files of source album {} to device",
+        src_album.overview()
+    );
 
-    None
+    let new_src_album = get_ft_src_album(src_album, dest_ft, album_lookup);
+    if let Some(src_album) = new_src_album {
+        println!("Found source album {}", src_album.overview());
+        adb_copy_album(&src_album, device);
+        Some(dest_ft.clone())
+    } else if let Some(ft) = src_album.file_type()
+        && allow_any
+    {
+        adb_copy_album(src_album, device);
+        Some(ft)
+    } else {
+        None
+    }
 }
 
 /// simply copies the album files (files in the album's directory) to the directory in the desired file type
