@@ -258,7 +258,7 @@ fn run() -> Result<()> {
                 if let Ok(info) = info {
                     let success = set_tags(a, &info);
                     if success.is_err() {
-                        println!("Failed to set album tags: {success:?}");
+                        println!("Failed to set album tags for {}: {success:?}", a.overview());
                     }
                 } else {
                     println!("Failed to get album info: {info:?}");
@@ -477,6 +477,7 @@ fn sync_to_device(ft: &FileType, config: &DirConfig, allow_any: bool) {
                 .iter()
                 .any(|(at, aa, _)| at == album_title && *aa == *album.artist)
             {
+                println!("Album {album_artist} - {album_title} is not on device");
                 ensure_album_is_on_device(album, ft, &album_lookup, &mut device, allow_any);
                 albums_on_device.insert((
                     album_title.to_string(),

@@ -177,7 +177,10 @@ pub fn download_cover_file(album: &mut Album) -> Result<i32> {
         }
         Ok(limit)
     } else {
-        bail!("Failed to find matching discogs result for {album:?}");
+        bail!(
+            "Failed to find matching discogs result for {}",
+            album.overview()
+        );
     }
 }
 
@@ -219,7 +222,10 @@ fn get_album_info_discogs(album: &Album) -> Result<(AlbumInfo, i32)> {
             limit,
         ))
     } else {
-        bail!("Failed to find matching discogs result for {album:?}");
+        bail!(
+            "Failed to find matching discogs result for {}",
+            album.overview()
+        );
     }
 }
 /*
