@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use audiotags::{AudioTag, FlacTag, Id3v2Tag, Tag};
+use regex::Regex;
 
 use crate::{Album, FileType, music_info::AlbumInfo};
 
@@ -25,11 +26,31 @@ pub fn set_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
             },
         };
 
-        //.context(format!("Failed to read tags from {track_path:?}"))?;
         tag.set_album_title(&album_info.title);
         tag.set_album_artist(&album_info.artist);
+        if tag.album_artists().is_none() {
+            tag.set_artist(&album_info.artist)
+        }
         if let Some(year) = album_info.year {
             tag.set_year(year);
+        }
+        let number_re = Regex::new(r"(\d+-)?(\d+)").unwrap();
+        if let Some(parts) = t.split_once(' ') {
+            if let Some(capture) = number_re.captures(parts.0) {
+                if let Some(c) = capture.get(1)
+                    && let Ok(disc_num) = c.as_str().parse()
+                    && tag.disc_number().is_none()
+                {
+                    tag.set_disc_number(disc_num);
+                }
+                if let Some(c) = capture.get(2)
+                    && let Ok(track_num) = c.as_str().parse()
+                    && tag.track_number().is_none()
+                {
+                    tag.set_track_number(track_num);
+                }
+            }
+            tag.set_title(parts.1.trim_start_matches("- "));
         }
         tag.write_to_path(
             track_path
