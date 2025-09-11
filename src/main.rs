@@ -46,7 +46,11 @@ enum Commands {
     /// be established, the files are also synced to the first ADB device
     Sync,
     /// Uses discogs to set music tags (metadata)
-    CleanUpTags { dir: PathBuf, no_cache: bool },
+    CleanUpTags {
+        dir: PathBuf,
+        #[arg(short, long)]
+        no_cache: bool,
+    },
     /// Uses discogs to download cover files. The cover files will be stored in the album directory
     FillInCoverFiles {
         dir: PathBuf,
