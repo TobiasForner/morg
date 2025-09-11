@@ -37,6 +37,17 @@ impl Album {
         }
     }
 
+    pub fn overview(&self) -> String {
+        format!(
+            "{} - {} ({:?}; {} tracks, {} cover files)",
+            self.artist,
+            self.title_without_filetype(),
+            self.dir_path,
+            self.tracks.len(),
+            self.cover_files.len()
+        )
+    }
+
     pub fn title_without_filetype(&self) -> String {
         if let Some(ft) = self.file_type()
             && let Some(ft) = ft.to_possible_value()
@@ -278,5 +289,6 @@ fn files_in_dir(root: &Path) -> Vec<PathBuf> {
 
 pub fn albums_in_dir(root: &Path) -> Vec<Album> {
     let files = files_in_dir(root);
+    println!("Got albums in directory {root:?}");
     group_files_into_albums(&files, root)
 }

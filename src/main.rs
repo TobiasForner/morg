@@ -232,16 +232,20 @@ fn run() -> Result<()> {
                 .iter()
                 .for_each(|(dest, ft, allow_any)| match dest {
                     Destination::PathDest(p) => {
+                        println!("===== Syncing to dir {p:?} =====");
                         sync_to_dir(p, ft, &config, *allow_any);
                     }
                     Destination::ADBDest => {
+                        println!("===== Syncing to ADB devce =====");
                         sync_to_device(ft, &config, *allow_any);
                     }
                 });
             Ok(())
         }
         Commands::CleanUpTags { dir } => {
+            println!("Loading albums...");
             let albums = albums_in_dir(&dir);
+            println!("Setting tags...");
             albums.iter().for_each(|a| {
                 let res = set_music_info(a);
                 if let Ok(limit) = res {
@@ -370,7 +374,10 @@ fn copy_missing_files_to_dir(src_album: &Album, dst_album: &Album) {
                     "Copying missing track {src_track:?} to {:?}",
                     dst_album.dir_path
                 );
-                let _ = std::fs::copy(src_track, &dst_album.dir_path);
+                let succ = std::fs::copy(src_track, &dst_album.dir_path);
+                if succ.is_err() {
+                    println!("Something went wrong: {succ:?}");
+                }
             }
         });
         src_album.cover_files.iter().for_each(|src_cover| {
@@ -380,7 +387,10 @@ fn copy_missing_files_to_dir(src_album: &Album, dst_album: &Album) {
                     "Copying missing track {src_cover:?} to {:?}",
                     dst_album.dir_path
                 );
-                let _ = std::fs::copy(src_cover, &dst_album.dir_path);
+                let succ = std::fs::copy(src_cover, &dst_album.dir_path);
+                if succ.is_err() {
+                    println!("Something went wrong: {succ:?}");
+                }
             }
         });
     } else {
@@ -423,7 +433,7 @@ fn sync_to_device(ft: &FileType, config: &DirConfig, allow_any: bool) {
             let src_album = get_ft_src_album(a, ft, &album_lookup);
             if let Some(src_album) = src_album {
                 if aft != *ft {
-                    println!("Found source album {src_album:?}");
+                    println!("Found source album {}", src_album.overview());
                     println!(
                         "Will attempt to delete album on adb device at {:?}",
                         a.dir_path
@@ -537,7 +547,8 @@ fn copy_missing_files_to_adb(src_album: &Album, dst_album: &Album, device: &mut 
                     "Copying missing cover file {src_cover:?} to {:?}",
                     dst_album.dir_path
                 );
-                let mut input = File::open(&src_cover).expect("Cannot open file");
+                let mut input = File::open(&src_cover)
+                    .unwrap_or_else(|e| panic!("Cannot open file {src_cover:?}: {e}"));
                 let name = src_cover
                     .file_name()
                     .expect("Cover files must have a file name!")
@@ -572,12 +583,13 @@ fn ensure_album_is_on_device(
     device: &mut ADBServerDevice,
     allow_any: bool,
 ) -> Option<FileType> {
+    println!("Copying source album {} to device", src_album.overview());
     if let Some((src_album, _src)) = album_lookup.get(&(
         src_album.title_without_filetype(),
         src_album.artist.clone(),
         dest_ft.clone(),
     )) {
-        println!("Found source album {src_album:?}");
+        println!("Found source album {}", src_album.overview());
         adb_copy_album(src_album, device);
         return Some(dest_ft.clone());
     } else if let Some((src_album, src)) = album_lookup.get(&(
@@ -585,7 +597,7 @@ fn ensure_album_is_on_device(
         src_album.artist.clone(),
         FileType::Flac,
     )) {
-        println!("Found Flac source album {src_album:?}");
+        println!("Found Flac source album {}", src_album.overview());
         if convert_src_album(src, src_album, dest_ft).is_ok() {
             adb_copy_album(src_album, device);
             return Some(dest_ft.clone());
@@ -595,7 +607,7 @@ fn ensure_album_is_on_device(
         src_album.artist.clone(),
         FileType::Wav,
     )) {
-        println!("Found wav source album {src_album:?}");
+        println!("Found wav source album {}", src_album.overview());
         println!("NOT IMPLEMENTED: Album conversion wav => {dest_ft:?}");
         if allow_any {
             adb_copy_album(src_album, device);
@@ -633,7 +645,7 @@ fn ensure_album_is_in_dir(
         src_album.artist.clone(),
         dest_ft.clone(),
     )) {
-        println!("Found source album {src_album:?}");
+        println!("Found source album {}", src_album.overview());
         if !dest_artist_dir.exists() {
             let _ = std::fs::create_dir_all(&dest_artist_dir);
         }
