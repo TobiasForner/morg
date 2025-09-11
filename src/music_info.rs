@@ -1,13 +1,14 @@
-use std::path::PathBuf;
+use core::time;
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
 use distance::levenshtein;
 use json::JsonValue;
 use reqwest::header::USER_AGENT;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{Album, music_tags::set_tags};
+use crate::Album;
 
 #[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Keys {
@@ -30,6 +31,74 @@ impl Keys {
             ))?
             .replace("\r\n", "\n");
         toml::from_str(&text).context("Could not parse keys from {keys_file:?}")
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AlbumInfo {
+    pub artist: String,
+    pub title: String,
+    pub year: Option<i32>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct MusicInfoCache {
+    cache: HashMap<String, AlbumInfo>,
+    refresh: bool,
+}
+impl MusicInfoCache {
+    pub fn new() -> Self {
+        MusicInfoCache {
+            cache: HashMap::new(),
+            refresh: true,
+        }
+    }
+    pub fn load(refresh: bool) -> Result<Self> {
+        let dirs = directories::ProjectDirs::from("TF", "TF", "morg")
+            .context("Failed to construct data path!")?;
+        if !dirs.data_local_dir().exists() {
+            std::fs::create_dir(dirs.data_local_dir())?;
+        }
+        let info_file = dirs.data_local_dir().join("music_info.toml");
+        if info_file.exists() {
+            let text = std::fs::read_to_string(&info_file)
+                .context(format!(
+                    "Could not read {info_file:?}. Does the file exist?"
+                ))?
+                .replace("\r\n", "\n");
+            let mut res: MusicInfoCache =
+                toml::from_str(&text).context("Could not parse music info from {info_file:?}")?;
+            res.refresh = refresh;
+            Ok(res)
+        } else {
+            Ok(MusicInfoCache::new())
+        }
+    }
+
+    pub fn store(&self) -> Result<()> {
+        let dirs = directories::ProjectDirs::from("TF", "TF", "morg")
+            .context("Failed to construct data path!")?;
+        let info_file = dirs.data_local_dir().join("music_info.toml");
+        let text = toml::to_string(&self)?;
+        std::fs::write(&info_file, text)?;
+        Ok(())
+    }
+
+    pub fn get_album_info(&mut self, album: &Album) -> Result<AlbumInfo> {
+        let key = format!("{}###{}", album.artist, album.title);
+        if self.refresh || !self.cache.contains_key(&key) {
+            let (album_info, limit) = get_album_info_discogs(album)?;
+            self.cache.insert(key, album_info.clone());
+            self.store().context("Failed to store cache")?;
+            if limit <= 1 {
+                println!("Waiting 60s to avoid rate limit...");
+
+                std::thread::sleep(time::Duration::from_secs(60));
+            }
+            Ok(album_info)
+        } else {
+            self.cache.get(&key).context("not found in cache").cloned()
+        }
     }
 }
 
@@ -112,9 +181,7 @@ pub fn download_cover_file(album: &mut Album) -> Result<i32> {
     }
 }
 
-/// returns the number of requests that are allowed in the current window (atm this is a minute and
-/// morg is allowed to use 60 requests per minute)
-pub fn set_music_info(album: &Album) -> Result<i32> {
+fn get_album_info_discogs(album: &Album) -> Result<(AlbumInfo, i32)> {
     let result = get_album_json(album);
     if let Ok((result, limit)) = result {
         let mut artist = None;
@@ -138,10 +205,28 @@ pub fn set_music_info(album: &Album) -> Result<i32> {
                 year = Some(ayear);
             }
         }
-        println!("{artist:?}; {album_title:?}; {year:?}");
-        set_tags(album, album_title, artist, year)?;
-        Ok(limit)
+        println!(
+            "{}: {artist:?}; {album_title:?}; {year:?}",
+            album.overview()
+        );
+
+        Ok((
+            AlbumInfo {
+                artist: artist.context("no artist")?.to_string(),
+                title: album_title.context("no album_title")?.to_string(),
+                year,
+            },
+            limit,
+        ))
     } else {
         bail!("Failed to find matching discogs result for {album:?}");
     }
 }
+/*
+/// returns the number of requests that are allowed in the current window (atm this is a minute and
+/// morg is allowed to use 60 requests per minute)
+pub fn set_music_info(album: &Album) -> Result<i32> {
+    let (info, limit) = get_album_info_discogs(album)?;
+    set_tags(album, &info)?;
+    Ok(limit)
+}*/

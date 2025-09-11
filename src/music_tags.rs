@@ -1,32 +1,34 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
-use audiotags::Tag;
+use anyhow::{Context, Result, bail};
+use audiotags::{AudioTag, FlacTag, Id3v2Tag, Tag};
 
-use crate::Album;
+use crate::{Album, FileType, music_info::AlbumInfo};
 
-pub fn set_tags(
-    album: &Album,
-    title: Option<&str>,
-    artist: Option<&str>,
-    year: Option<i32>,
-) -> Result<()> {
+fn get_empty_mp3_tag() -> Box<dyn AudioTag + Send + Sync> {
+    Box::new(Id3v2Tag::new())
+}
+
+fn get_empty_flac_tag() -> Box<dyn AudioTag + Send + Sync> {
+    Box::new(FlacTag::new())
+}
+
+pub fn set_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
     album.tracks.iter().try_for_each(|t| {
         let track_path = album.dir_path.join(t);
-        let mut tag = Tag::new()
-            .read_from_path(&track_path)
-            .context(format!("Failed to read tags from {track_path:?}"))?;
-        if let Some(title) = title
-            && !title.trim().is_empty()
-        {
-            tag.set_album_title(title);
-        }
-        if let Some(artist) = artist
-            && !artist.trim().is_empty()
-        {
-            tag.set_album_artist(artist);
-        }
-        if let Some(year) = year {
+        let mut tag = match Tag::new().read_from_path(&track_path) {
+            Ok(tag) => tag,
+            Err(_) => match album.file_type() {
+                Some(FileType::MP3) => get_empty_mp3_tag(),
+                Some(FileType::Flac) => get_empty_flac_tag(),
+                _ => bail!(""),
+            },
+        };
+
+        //.context(format!("Failed to read tags from {track_path:?}"))?;
+        tag.set_album_title(&album_info.title);
+        tag.set_album_artist(&album_info.artist);
+        if let Some(year) = album_info.year {
             tag.set_year(year);
         }
         tag.write_to_path(

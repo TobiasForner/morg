@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, anyhow, bail};
 use directories::ProjectDirs;
 use fs_extra::dir::CopyOptions;
+use music_info::MusicInfoCache;
+use music_tags::set_tags;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -21,7 +23,7 @@ use crate::album::{albums_in_dir, create_source_album_lookup, group_files_into_a
 use adb_client::{ADBDeviceExt, ADBServer, ADBServerDevice};
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::music_info::{download_cover_file, set_music_info};
+use crate::music_info::download_cover_file;
 
 const IMAGE_EXTENSIONS: [&str; 2] = ["jpg", "png"];
 const MUSIC_EXTENSIONS: [&str; 3] = ["mp3", "flac", "wav"];
@@ -44,7 +46,7 @@ enum Commands {
     /// be established, the files are also synced to the first ADB device
     Sync,
     /// Uses discogs to set music tags (metadata)
-    CleanUpTags { dir: PathBuf },
+    CleanUpTags { dir: PathBuf, no_cache: bool },
     /// Uses discogs to download cover files. The cover files will be stored in the album directory
     FillInCoverFiles {
         dir: PathBuf,
@@ -242,20 +244,20 @@ fn run() -> Result<()> {
                 });
             Ok(())
         }
-        Commands::CleanUpTags { dir } => {
+        Commands::CleanUpTags { dir, no_cache } => {
             println!("Loading albums...");
             let albums = albums_in_dir(&dir);
+            let mut cache = MusicInfoCache::load(no_cache)?;
             println!("Setting tags...");
             albums.iter().for_each(|a| {
-                let res = set_music_info(a);
-                if let Ok(limit) = res {
-                    if limit <= 1 {
-                        println!("Waiting 60s to avoid rate limit...");
-
-                        std::thread::sleep(time::Duration::from_secs(60));
+                let info = cache.get_album_info(a);
+                if let Ok(info) = info {
+                    let success = set_tags(a, &info);
+                    if success.is_err() {
+                        println!("Failed to set album tags: {success:?}");
                     }
                 } else {
-                    println!("Failed to set tags: {res:?}");
+                    println!("Failed to get album info: {info:?}");
                 }
             });
             Ok(())
@@ -418,12 +420,19 @@ fn sync_to_device(ft: &FileType, config: &DirConfig, allow_any: bool) {
     let _ = device.shell_command(&command, &mut buf);
     let bytes = buf.into_inner().unwrap();
     let out = String::from_utf8_lossy(&bytes).to_string();
+    println!("find output: {out:?}");
     let music_paths: Vec<PathBuf> = out
         .lines()
         .map(|l| PathBuf::from_str(l).expect("each line should be a valid path!"))
         .collect();
     let pb = PathBuf::from_str("/storage/emulated/0/Music").unwrap();
     let albums = group_files_into_albums(&music_paths, pb.as_path());
+    let mut album_overview: Vec<String> = albums.iter().map(|a| a.overview()).collect();
+    album_overview.sort();
+    println!(
+        "----- Albums on device -----\n{}\n----------",
+        album_overview.join("\n")
+    );
     let mut albums_on_device = HashSet::new();
 
     let album_lookup = create_source_album_lookup(&config.source_directories);
@@ -450,47 +459,6 @@ fn sync_to_device(ft: &FileType, config: &DirConfig, allow_any: bool) {
                     copy_missing_files_to_adb(&src_album, a, &mut device);
                 }
             }
-            /*if aft != *ft {
-                println!("Found {a:?} with wrong filetype (is {aft:?}, but should be {ft:?})");
-                if let Some((src_album, _src)) =
-                    album_lookup.get(&(a.title.clone(), a.artist.clone(), ft.clone()))
-                {
-                    println!("Found source album {src_album:?}");
-                    println!(
-                        "Will attempt to delete album on adb device at {:?}",
-                        a.dir_path
-                    );
-                    println!("Deleting {:?} on ADB device!", a.dir_path);
-                    del_album_on_device(a, &mut device);
-                    println!(
-                        "copying {:?} to {:?} on ADB device!",
-                        src_album.dir_path, a.dir_path
-                    );
-                    adb_copy_album(src_album, &mut device);
-                    albums_on_device.insert((a.title.clone(), a.artist.clone(), ft.clone()));
-                } else if let Some((src_album, src)) =
-                    album_lookup.get(&(a.title.clone(), a.artist.clone(), FileType::Flac))
-                {
-                    println!("Found Flac source album {src_album:?}");
-                    if let Ok(src_album) = convert_src_album(src, src_album, ft) {
-                        println!("Deleting {:?} on ADB device!", a.dir_path);
-                        del_album_on_device(a, &mut device);
-                        println!(
-                            "copying {:?} to {:?} on ADB device!",
-                            src_album.dir_path, a.dir_path
-                        );
-                        adb_copy_album(&src_album, &mut device);
-                        albums_on_device.insert((a.title.clone(), a.artist.clone(), ft.clone()));
-                    }
-                } else if let Some((src_album, _src)) =
-                    album_lookup.get(&(a.title.clone(), a.artist.clone(), FileType::Wav))
-                {
-                    println!("Found wav source album {src_album:?}");
-                    println!("NOT IMPLEMENTED: Album conversion wav => mp3");
-                }
-            } else {
-                albums_on_device.insert((a.title.clone(), a.artist.clone(), ft.clone()));
-            };*/
         }
         if a.file_type().is_none() {
             println!("Failed to determine file type for {a:?}");
@@ -549,6 +517,7 @@ fn copy_missing_files_to_adb(src_album: &Album, dst_album: &Album, device: &mut 
                 );
                 let mut input = File::open(&src_cover)
                     .unwrap_or_else(|e| panic!("Cannot open file {src_cover:?}: {e}"));
+
                 let name = src_cover
                     .file_name()
                     .expect("Cover files must have a file name!")
@@ -755,6 +724,8 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
                                 "0",
                                 "-id3v2_version",
                                 "3",
+                                "-write_id3v1",
+                                "1",
                                 dst_path.to_str().expect(""),
                             ])
                             .output()
