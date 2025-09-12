@@ -50,7 +50,15 @@ pub fn set_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
                     tag.set_track_number(track_num);
                 }
             }
-            tag.set_title(parts.1.trim_start_matches("- "));
+            if let Some((name, _)) = parts.1.rsplit_once('.') {
+                let title = name.trim_start_matches("- ");
+                let title = title
+                    .replace(&format!("{} - ", album_info.artist), "")
+                    .replace(&format!("{} - ", album.artist), "")
+                    .replace(&format!("{} - ", album_info.title), "");
+                let title = title.trim();
+                tag.set_title(title);
+            }
         }
         tag.write_to_path(
             track_path
