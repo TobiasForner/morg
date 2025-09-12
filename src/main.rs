@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use directories::ProjectDirs;
 use fs_extra::dir::CopyOptions;
+use indicatif::ProgressIterator;
 use music_info::MusicInfoCache;
 use music_tags::set_tags;
 use serde::{Deserialize, Serialize};
@@ -254,6 +255,7 @@ fn run() -> Result<()> {
             let mut cache = MusicInfoCache::load(no_cache)?;
             println!("Setting tags...");
             albums.iter().for_each(|a| {
+            albums.iter().progress().for_each(|a| {
                 let info = cache.get_album_info(a);
                 if let Ok(info) = info {
                     let success = set_tags(a, &info);
