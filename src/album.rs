@@ -18,6 +18,8 @@ pub struct Album {
     pub tracks: Vec<String>,
     pub dir_path: PathBuf,
     pub cover_files: Vec<PathBuf>,
+    pub parsed_title: String,
+    pub parsed_artist: String,
 }
 
 impl Album {
@@ -27,6 +29,8 @@ impl Album {
         tracks: Vec<String>,
         dir_path: PathBuf,
         cover_files: Vec<PathBuf>,
+        parsed_title: String,
+        parsed_artist: String,
     ) -> Self {
         Album {
             title,
@@ -34,6 +38,8 @@ impl Album {
             tracks,
             dir_path,
             cover_files,
+            parsed_title,
+            parsed_artist,
         }
     }
 
@@ -60,6 +66,23 @@ impl Album {
                 .to_string();
         }
         self.title.clone()
+    }
+
+    pub fn album_dir_with_ft(&self, root_dir: PathBuf, ft: &Option<FileType>) -> PathBuf {
+        let title = if let Some(ft) = ft {
+            format!(
+                "{} [{}]",
+                self.parsed_title,
+                ft.to_possible_value().unwrap().get_name()
+            )
+        } else {
+            self.parsed_title.to_string()
+        };
+        root_dir.join(&self.parsed_artist).join(title)
+    }
+
+    pub fn key(&self) -> String {
+        format!("{}###{}", self.parsed_artist, self.parsed_title)
     }
 
     pub fn file_type(&self) -> Option<FileType> {
@@ -117,6 +140,8 @@ impl Album {
                 tracks,
                 self.dir_path.clone(),
                 cover_files,
+                self.parsed_title.clone(),
+                self.parsed_artist.clone(),
             ))
         } else {
             bail!("Failed to merge {self:?} and {other:?}!")
@@ -134,6 +159,7 @@ impl Album {
                 artists_counts[&artist] += 1;
             }
         });
+        self.parsed_title = self.title_without_filetype();
 
         let mc = artists_counts.most_common();
         if !mc.is_empty() {
@@ -144,16 +170,13 @@ impl Album {
 
 pub fn create_source_album_lookup(
     source_dirs: &[PathBuf],
-) -> HashMap<(String, String, FileType), (Album, PathBuf)> {
+) -> HashMap<(String, FileType), (Album, PathBuf)> {
     let mut album_lookup = HashMap::new();
     source_dirs.iter().for_each(|sd| {
         let albums = albums_in_dir(sd);
         albums.into_iter().for_each(|a| {
             if let Some(ft) = a.file_type() {
-                album_lookup.insert(
-                    (a.title_without_filetype(), a.artist.clone(), ft),
-                    (a.clone(), sd.clone()),
-                );
+                album_lookup.insert((a.key(), ft), (a.clone(), sd.clone()));
             }
         })
     });
@@ -226,7 +249,13 @@ pub fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {
     let mut album = album.trim().to_string();
     if let Some(ext) = MUSIC_EXTENSIONS
         .iter()
-        .flat_map(|ext| [ext.to_string(), ext.to_uppercase()])
+        .flat_map(|ext| {
+            [ext.to_string(), ext.to_uppercase()].into_iter().chain(
+                FileType::value_variants()
+                    .iter()
+                    .map(|ft| ft.to_possible_value().unwrap().get_name().to_string()),
+            )
+        })
         .find(|ext| album.ends_with(&format!("[{ext}]")))
     {
         album = album.replace(&format!("[{ext}]"), "").trim().to_string();
@@ -247,10 +276,12 @@ pub fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {
         .to_path_buf();
     Ok(Album::new(
         album.to_string(),
-        artist,
+        artist.clone(),
         tracks,
         dir_path,
         cover_files,
+        album.to_string(),
+        artist,
     ))
 }
 

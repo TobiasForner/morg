@@ -85,7 +85,7 @@ impl MusicInfoCache {
     }
 
     pub fn get_album_info(&mut self, album: &Album) -> Result<AlbumInfo> {
-        let key = format!("{}###{}", album.artist, album.title);
+        let key = album.key();
         if self.refresh || !self.cache.contains_key(&key) {
             let (album_info, limit) = get_album_info_discogs(album)?;
             self.cache.insert(key, album_info.clone());
@@ -112,7 +112,7 @@ fn get_album_json(album: &Album) -> Result<(JsonValue, i32)> {
         ("album", album.title.to_string()),
         ("format", "album".to_string()),
         //("per_page", "30"),
-        ("page", "1".to_string()),
+        ("page", "5".to_string()),
         ("description", "Official Release".to_string()),
         ("key", keys.key.to_string()),
         ("secret", keys.secret.to_string()),
@@ -228,11 +228,3 @@ fn get_album_info_discogs(album: &Album) -> Result<(AlbumInfo, i32)> {
         );
     }
 }
-/*
-/// returns the number of requests that are allowed in the current window (atm this is a minute and
-/// morg is allowed to use 60 requests per minute)
-pub fn set_music_info(album: &Album) -> Result<i32> {
-    let (info, limit) = get_album_info_discogs(album)?;
-    set_tags(album, &info)?;
-    Ok(limit)
-}*/
