@@ -5,6 +5,7 @@ use crate::music_tags::get_track_tags;
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
 use counter::Counter;
+use indicatif::ProgressIterator;
 use pathdiff::diff_paths;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -185,7 +186,7 @@ pub fn create_source_album_lookup(
 
 pub fn group_files_into_albums(file_paths: &[PathBuf], root: &Path) -> Vec<Album> {
     let mut album_lookup: HashMap<PathBuf, Album> = HashMap::new();
-    file_paths.iter().for_each(|mp| {
+    file_paths.iter().progress().for_each(|mp| {
         if let Some(album_dir) = mp.parent() {
             let album_dir = album_dir.to_path_buf();
             let album = path_to_details(mp.into(), root.to_path_buf());
@@ -203,8 +204,10 @@ pub fn group_files_into_albums(file_paths: &[PathBuf], root: &Path) -> Vec<Album
             }
         }
     });
+    println!("Finalizing albums...");
     album_lookup
         .into_values()
+        .progress()
         .map(|mut a| {
             a.finalize();
             a
@@ -321,5 +324,6 @@ fn files_in_dir(root: &Path) -> Vec<PathBuf> {
 pub fn albums_in_dir(root: &Path) -> Vec<Album> {
     let files = files_in_dir(root);
     println!("Got albums in directory {root:?}");
+    println!("Grouping files into albums...");
     group_files_into_albums(&files, root)
 }

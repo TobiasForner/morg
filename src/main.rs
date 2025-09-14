@@ -247,6 +247,7 @@ fn run() -> Result<()> {
         Commands::CleanUpTags { dir, no_cache } => {
             println!("Loading albums...");
             let albums = albums_in_dir(&dir);
+            println!("Loading cache...");
             let mut cache = MusicInfoCache::load(no_cache)?;
             println!("Setting tags...");
             albums.iter().progress().for_each(|a| {
@@ -350,10 +351,10 @@ fn get_ft_src_album(
     if let Some((src_album, _src)) = album_lookup.get(&(album.key(), dest_ft.clone())) {
         Some(src_album.clone())
     } else if let Some((src_album, src)) = album_lookup.get(&(album.key(), FileType::Flac)) {
-        println!("Found Flac source album {src_album:?}");
+        println!("Found Flac source album {:?}", album.overview());
         convert_src_album(src, src_album, dest_ft).ok()
-    } else if let Some((src_album, _src)) = album_lookup.get(&(album.key(), FileType::Wav)) {
-        println!("Found wav source album {src_album:?}");
+    } else if let Some((_src_album, _src)) = album_lookup.get(&(album.key(), FileType::Wav)) {
+        println!("Found wav source album {:?}", album.overview());
         println!("NOT IMPLEMENTED: Album conversion wav => mp3");
         None
     } else {
@@ -586,7 +587,7 @@ fn ensure_album_is_in_dir(
         let _ = fs_extra::copy_items(&[&src_album.dir_path], dest_artist_dir, &copy_options);
         return Ok(dest_ft.clone());
     } else if let Some((src_album, src)) = album_lookup.get(&(src_album.key(), FileType::Flac)) {
-        println!("Found Flac source album {src_album:?}");
+        println!("Found Flac source album {:?}", src_album.overview());
         if let Ok(src_album) = convert_src_album(src, src_album, dest_ft) {
             if !dest_artist_dir.exists() {
                 let _ = std::fs::create_dir_all(&dest_artist_dir);
