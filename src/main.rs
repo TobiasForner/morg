@@ -18,8 +18,14 @@ use std::{
 mod album;
 mod music_info;
 mod music_tags;
-use crate::album::Album;
-use crate::album::{albums_in_dir, create_source_album_lookup, group_files_into_albums};
+use crate::{
+    album::{Album, path_to_details},
+    music_info::AlbumInfo,
+};
+use crate::{
+    album::{albums_in_dir, create_source_album_lookup, group_files_into_albums},
+    music_tags::set_missing_tags,
+};
 
 use adb_client::{ADBDeviceExt, ADBServer, ADBServerDevice};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -202,7 +208,7 @@ fn run() -> Result<()> {
             Ok(())
         }
         Commands::Test => {
-            let mut album = Album::new(
+            /*let mut album = Album::new(
                 "Who Made Who".to_string(),
                 "AC/DC".to_string(),
                 vec![],
@@ -212,7 +218,14 @@ fn run() -> Result<()> {
                 "AC/DC".to_string(),
             );
             download_cover_file(&mut album)?;
-            //set_music_info(&album)?;
+            //set_music_info(&album)?;*/
+            let res = path_to_details(
+                PathBuf::from_str(
+                    "G:\\Music/In This Moment/In This Moment - Black Widow [FLAC]/02 - In This Moment - Sex Metal Barbie.flac",
+                )?,
+                PathBuf::from_str("G:\\Music")?,
+            );
+            println!("{res:?}");
             Ok(())
         }
         Commands::Sync => {
@@ -258,7 +271,16 @@ fn run() -> Result<()> {
                         println!("Failed to set album tags for {}: {success:?}", a.overview());
                     }
                 } else {
-                    println!("Failed to get album info: {info:?}");
+                    println!("Failed to get album info: {info:?}; Falling back to album...");
+                    let album_info = AlbumInfo {
+                        artist: a.artist.clone(),
+                        title: a.title.clone(),
+                        year: None,
+                    };
+                    let success = set_missing_tags(a, &album_info);
+                    if success.is_err() {
+                        println!("Failed to set album tags for {}: {success:?}", a.overview());
+                    }
                 }
             });
             Ok(())

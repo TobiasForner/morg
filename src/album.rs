@@ -250,6 +250,10 @@ pub fn path_to_details(path: PathBuf, root_dir: PathBuf) -> Result<Album> {
     };
 
     let mut album = album.trim().to_string();
+    let tmp = album.trim_start_matches(&format!("{artist} - "));
+    if !tmp.is_empty() {
+        album = tmp.trim().to_string();
+    }
     if let Some(ext) = MUSIC_EXTENSIONS
         .iter()
         .flat_map(|ext| {
