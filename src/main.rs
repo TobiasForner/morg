@@ -550,7 +550,11 @@ fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, a
 
             // copy files
             if let Some(src_album) = src_album {
-                if aft != *ft {
+                if aft != *ft
+                    && !albums
+                        .iter()
+                        .any(|a2| a2.key() == a.key() && a2.file_type() == Some(ft.clone()))
+                {
                     println!(
                         "Found {} with wrong filetype (is {aft:?}, but should be {ft:?})",
                         a.overview()
