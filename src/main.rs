@@ -1,13 +1,12 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
-use fs_extra::dir::CopyOptions;
 use indicatif::ProgressIterator;
 use music_info::MusicInfoCache;
 use music_tags::set_tags;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
-    fs::File,
+    fmt::Display,
     io::BufWriter,
     path::{Path, PathBuf},
     process::Command,
@@ -25,11 +24,11 @@ use crate::{
     music_info::AlbumInfo,
 };
 use crate::{
-    album::{albums_in_dir, create_source_album_lookup, group_files_into_albums},
+    album::{albums_in_dir, create_source_album_lookup},
     music_tags::set_missing_tags,
 };
 
-use adb_client::{ADBDeviceExt, ADBServer, ADBServerDevice};
+use adb_client::{ADBDeviceExt, ADBServerDevice};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::music_info::download_cover_file;
@@ -117,6 +116,15 @@ impl ValueEnum for FileType {
     fn value_variants<'a>() -> &'a [Self] {
         use FileType::*;
         &[MP3, Wav, Flac]
+    }
+}
+
+impl Display for FileType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.to_possible_value() {
+            Some(v) => f.write_str(v.get_name()),
+            None => Err(std::fmt::Error {}),
+        }
     }
 }
 
@@ -252,22 +260,43 @@ fn run() -> Result<()> {
                         println!("===== Syncing to dir {p:?} =====");
                         let mut loc = DirLocation::new(p.to_path_buf());
                         sync_to_loc(&mut loc, ft, &config, *allow_any);
-
-                        //sync_to_dir(p, ft, &config, *allow_any);
                     }
                     Destination::ADBDest => {
                         println!("===== Syncing to ADB devce =====");
-                        let mut loc = AdbLocation::new();
+                        let loc = AdbLocation::new();
                         if let Ok(mut loc) = loc {
                             sync_to_loc(&mut loc, ft, &config, *allow_any);
                         } else {
                             println!("{loc:?}\nSkipping this location.");
                         }
-                        //sync_to_device(ft, &config, *allow_any);
                     }
                 });
             Ok(())
         }
+        Commands::Check => {
+            let config = DirConfig::read()?;
+            let dirs_to_handle: HashSet<PathBuf> = config
+                .source_directories
+                .iter()
+                .chain(config.destinations.iter().filter_map(|d| {
+                    if let (Destination::PathDest(p), _, _) = d {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                }))
+                .cloned()
+                .collect();
+            // check whether an album path is contained in another one
+            dirs_to_handle.iter().for_each(|dir| {
+                let albums = albums_in_dir(dir);
+                albums.iter().enumerate().for_each(|(i, a)| {
+                    if let Some((_, a2)) = albums
+                        .iter()
+                        .enumerate()
+                        .find(|(j, a2)| i != *j && a.dir_path.starts_with(&a2.dir_path))
+                    {
+                        println!(
         Commands::CleanUpTags { dir, no_cache } => {
             println!("Loading albums...");
             let albums = albums_in_dir(&dir);
@@ -378,7 +407,6 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     let desired_ft = dest_ft.to_possible_value().expect("");
     let desired_ft = desired_ft.get_name();
 
-    let src_artist_dir = artist_dir(src, &src_album.artist);
     let new_src_album_dir = src_album.album_dir_with_ft(src.to_path_buf(), &Some(dest_ft.clone()));
 
     let create_album_dir = || {
@@ -392,9 +420,9 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
             let cf_name = cf.file_name().expect("cover files muts have a file name!");
             let cf_dest = new_src_album_dir.join(cf_name);
             println!("COPY: {cf:?} -> {cf_dest:?}");
-            let r = std::fs::copy(cf, src_artist_dir.join(cf_name));
+            let r = std::fs::copy(cf, &cf_dest);
             if r.is_err() {
-                println!("Cover copy failed!");
+                println!("Cover copy failed: {r:?}");
             }
         });
     };
@@ -467,10 +495,6 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     }
 }
 
-fn artist_dir(root: &Path, artist: &str) -> PathBuf {
-    root.join(normalize_artist(artist))
-}
-
 fn normalize_artist(artist: &str) -> String {
     artist.replace("/", " ")
 }
@@ -506,7 +530,7 @@ fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, a
     println!("Loaded source albums.");
     let albums = location.albums().unwrap();
     let mut albums_in_loc = HashSet::new();
-    let mut copy_full_album =
+    let copy_full_album =
         |location: &mut dyn Location,
          album: &Album,
          albums_in_loc: &mut HashSet<(String, FileType)>| {
@@ -542,7 +566,7 @@ fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, a
                     location.copy_missing_files(&src_album, a);
                 }
             } else {
-                println!("Did not find source album for {}", a.overview());
+                println!("Did not find {ft:?} source album for {}", a.overview());
                 albums_in_loc.insert((a.key(), aft.clone()));
             }
         } else {
