@@ -533,13 +533,20 @@ fn del_album_on_device(adb_album: &Album, device: &mut ADBServerDevice) {
 }
 
 fn dir_exists_on_adb_device(device: &mut ADBServerDevice, path: &str) -> bool {
+    let mut path = path.to_string();
+    if !(path.starts_with('\"')) {
+        path = format!("\"{path}");
+    }
+    if !(path.ends_with('\"')) {
+        path = format!("{path}\"");
+    }
     let cmd = format!("if [ -d {path} ]; then echo 'Exists'; else echo 'Not found'; fi");
     let command: Vec<&str> = vec![&cmd];
     let mut buf = BufWriter::new(Vec::new());
     let _ = device.shell_command(&command, &mut buf);
     let bytes = buf.into_inner().unwrap();
     let out = String::from_utf8_lossy(&bytes).to_string();
-    out.contains("exists")
+    out.contains("Exists")
 }
 
 fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, allow_any: bool) {
