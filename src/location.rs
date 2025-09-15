@@ -3,7 +3,7 @@ use std::{fs::File, io::BufWriter, path::PathBuf, str::FromStr};
 use crate::{
     Album,
     album::{albums_in_dir, group_files_into_albums},
-    del_album_on_device, dir_exists_on_adb_device, normalize_artist,
+    del_album_on_device, dir_exists_on_adb_device,
 };
 use adb_client::{ADBDeviceExt, ADBServer, ADBServerDevice};
 use anyhow::{Context, Result, bail};
@@ -120,11 +120,7 @@ impl Location for AdbLocation {
     }
 
     fn copy_full_album(&mut self, src_album: &Album) -> Result<()> {
-        // check whether artist dir exists on device
-        let adb_artist_dir = format!(
-            "/storage/emulated/0/Music/{}",
-            normalize_artist(&src_album.parsed_artist)
-        );
+        let adb_artist_dir = format!("/storage/emulated/0/Music/{}", &src_album.parsed_artist);
         if !dir_exists_on_adb_device(&mut self.device, &adb_artist_dir) {
             let mut buf = BufWriter::new(Vec::new());
             let adb_dir_s = format!("\"{adb_artist_dir}\"");
@@ -134,23 +130,27 @@ impl Location for AdbLocation {
         let adb_album_dir =
             src_album.album_dir_with_ft(PathBuf::from("/storage/emulated/0/Music"), &None);
         let adb_album_dir = adb_album_dir.to_str().unwrap();
-        if !dir_exists_on_adb_device(&mut self.device, adb_album_dir) {
+        let adb_album_dir = adb_album_dir.replace("\\", "/");
+        let adb_album_dir_s = format!("\"{adb_album_dir}\"");
+        if !dir_exists_on_adb_device(&mut self.device, &adb_album_dir_s) {
             let mut buf = BufWriter::new(Vec::new());
-            let adb_dir_s = format!("\"{adb_album_dir}\"");
-            let command = vec!["mkdir", &adb_dir_s];
-            let _ = self.device.shell_command(&command, &mut buf);
+            // TODO: only replace unescaped double backslash
+            let command = vec!["mkdir", &adb_album_dir_s];
+            let success = self.device.shell_command(&command, &mut buf);
+            if success.is_err() {
+                println!("{success:?}");
+            }
         }
         src_album.cover_files.iter().for_each(|cf| {
-            let full_cover_file = src_album.dir_path.join(cf);
-            let mut input = File::open(full_cover_file).expect("Cannot open file");
+            let mut input = File::open(cf).expect("Cannot open file {cf:?}");
             let name = cf
                 .file_name()
                 .expect("Cover files must have a file name!")
                 .to_str()
-                .expect("Cover file name must be convertible to str");
+                .expect("Cover file name must be convertible to str")
+                .replace(".jpeg", ".jpg");
             let full_cover_dst = format!("{adb_album_dir}/{name}");
             let _ = self.device.push(&mut input, &full_cover_dst);
-            drop(input);
         });
         src_album.tracks.iter().for_each(|tf| {
             let full_track_file = src_album.dir_path.join(tf);
@@ -158,20 +158,25 @@ impl Location for AdbLocation {
             match input {
                 Ok(mut input) => {
                     let full_track_dst = format!("{adb_album_dir}/{tf}");
-                    let _ = self.device.push(&mut input, &full_track_dst);
+                    let success = self.device.push(&mut input, &full_track_dst);
+                    if success.is_err() {
+                        println!("{success:?}");
+                    }
                 }
                 Err(_) => println!("Cannot open track file {full_track_file:?}"),
             }
         });
         Ok(())
     }
+
     fn del_album(&mut self, album: &Album) -> Result<()> {
         del_album_on_device(album, &mut self.device);
         Ok(())
     }
 
     fn copy_missing_files(&mut self, src_album: &Album, dst_album: &Album) {
-        if dst_album.dir_path.exists() {
+        let dst_dir = dst_album.dir_path.to_str().unwrap();
+        if dir_exists_on_adb_device(&mut self.device, dst_dir) {
             src_album.tracks.iter().for_each(|src_track| {
                 if !dst_album.tracks.iter().any(|t| t == src_track) {
                     let src_track = src_album.dir_path.join(src_track);
@@ -185,14 +190,12 @@ impl Location for AdbLocation {
                         .expect("Track files must have a file name!")
                         .to_str()
                         .expect("Cover file name must be convertible to str");
-                    let full_track_dst = format!(
-                        "{}/{name}",
-                        src_album
-                            .dir_path
-                            .to_str()
-                            .expect("album dir must be convertible to str")
-                    );
-                    let _ = self.device.push(&mut input, &full_track_dst);
+                    let full_track_dst = format!("{dst_dir}/{name}");
+                    println!("PUSH {src_track:?} -> {full_track_dst}");
+                    let success = self.device.push(&mut input, &full_track_dst);
+                    if success.is_err() {
+                        println!("{success:?}");
+                    }
                 }
             });
             src_album.cover_files.iter().for_each(|src_cover| {
@@ -209,25 +212,18 @@ impl Location for AdbLocation {
                         .file_name()
                         .expect("Cover files must have a file name!")
                         .to_str()
-                        .expect("Cover file name must be convertible to str");
-                    let full_cover_dst = format!(
-                        "{}/{name}",
-                        dst_album
-                            .dir_path
-                            .to_str()
-                            .expect("album dir must be convertible to str")
-                    );
+                        .expect("Cover file name must be convertible to str")
+                        .replace(".jpeg", ".jpg");
+                    let full_cover_dst = format!("{dst_dir}/{name}");
                     let _ = self.device.push(&mut input, &full_cover_dst);
                 }
             });
         } else {
             println!(
-                "copying {:?} to {:?}!",
-                src_album.dir_path, dst_album.dir_path
+                "{:?} does not exist on device. Copying everything from {:?}!",
+                dst_dir, src_album.dir_path,
             );
-            let copy_options = CopyOptions::new();
-            let _ =
-                fs_extra::copy_items(&[&src_album.dir_path], &dst_album.dir_path, &copy_options);
+            let _ = self.copy_full_album(src_album);
         }
     }
 }

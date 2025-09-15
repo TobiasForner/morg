@@ -449,8 +449,8 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
         Some(FileType::Flac) => {
             match dest_ft {
                 FileType::MP3 => {
-                    copy_cover_files();
                     create_album_dir();
+                    copy_cover_files();
                     src_album.tracks.iter().for_each(|t| {
                         let full_path = src_album.dir_path.join(t);
                         let t_new = t.replace(".flac", &format!(".{desired_ft}"));
@@ -513,10 +513,6 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     }
 }
 
-fn normalize_artist(artist: &str) -> String {
-    artist.replace("/", " ")
-}
-
 fn del_album_on_device(adb_album: &Album, device: &mut ADBServerDevice) {
     let mut buf = BufWriter::new(Vec::new());
     let album_path = adb_album
@@ -575,21 +571,22 @@ fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, a
 
             // copy files
             if let Some(src_album) = src_album {
-                if aft != *ft
-                    && !albums
+                if aft != *ft {
+                    if !albums
                         .iter()
                         .any(|a2| a2.key() == a.key() && a2.file_type() == Some(ft.clone()))
-                {
-                    println!(
-                        "Found {} with wrong filetype (is {aft:?}, but should be {ft:?})",
-                        a.overview()
-                    );
-                    println!(
-                        "Will attempt to delete album in destination {:?}",
-                        a.dir_path
-                    );
-                    let _ = location.del_album(a);
-                    copy_full_album(location, &src_album, &mut albums_in_loc);
+                    {
+                        println!(
+                            "Found {} with wrong filetype (is {aft:?}, but should be {ft:?})",
+                            a.overview()
+                        );
+                        println!(
+                            "Will attempt to delete album in destination {:?}",
+                            a.dir_path
+                        );
+                        let _ = location.del_album(a);
+                        copy_full_album(location, &src_album, &mut albums_in_loc);
+                    }
                 } else {
                     albums_in_loc.insert((a.key(), aft.clone()));
                     location.copy_missing_files(&src_album, a);
