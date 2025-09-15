@@ -50,6 +50,7 @@ enum Commands {
         #[command(subcommand)]
         subcommand: ConfigCommands,
     },
+    Check,
     /// sync files in the sources to the destination directories. If a suitable ADB connection can
     /// be established, the files are also synced to the first ADB device
     Sync,
@@ -297,6 +298,18 @@ fn run() -> Result<()> {
                         .find(|(j, a2)| i != *j && a.dir_path.starts_with(&a2.dir_path))
                     {
                         println!(
+                            "Album {} is in a subdir of album {}",
+                            a.overview(),
+                            a2.overview()
+                        );
+                    }
+                    if a.tracks.is_empty() {
+                        println!("Album {} does not contain any tracks!", a.overview());
+                    }
+                });
+            });
+            Ok(())
+        }
         Commands::CleanUpTags { dir, no_cache } => {
             println!("Loading albums...");
             let albums = albums_in_dir(&dir);
