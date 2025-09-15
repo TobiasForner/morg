@@ -305,6 +305,11 @@ fn run() -> Result<()> {
                     }
                     if a.tracks.is_empty() {
                         println!("Album {} does not contain any tracks!", a.overview());
+                    } else if a.file_type().is_none() {
+                        println!(
+                            "Album {} contains tracks with multiple filetypes",
+                            a.overview()
+                        );
                     }
                 });
             });
