@@ -10,6 +10,7 @@ use pathdiff::diff_paths;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::read_dir;
+use std::os::windows::fs::FileTypeExt;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -313,9 +314,9 @@ fn files_in_dir(root: &Path) -> Vec<PathBuf> {
         .for_each(|de| {
             let de = de.unwrap();
             if let Ok(ft) = de.file_type() {
-                if ft.is_file() {
+                if ft.is_file() || ft.is_symlink_file() {
                     res.push(de.path().to_path_buf());
-                } else if ft.is_dir() {
+                } else if ft.is_dir() || ft.is_symlink_dir() {
                     let mut rec = files_in_dir(&de.path());
 
                     res.append(&mut rec);
