@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
+use fs_extra::dir::CopyOptions;
 use indicatif::ProgressIterator;
 use music_info::MusicInfoCache;
 use music_tags::set_tags;
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    fs::read_dir,
     io::BufWriter,
     path::{Path, PathBuf},
     process::Command,
@@ -66,6 +68,7 @@ enum Commands {
         #[arg(short, long)]
         overwrite: bool,
     },
+    Fix,
     /// Just for internal testing purposes
     Test,
 }
@@ -288,10 +291,12 @@ fn run() -> Result<()> {
                 }))
                 .cloned()
                 .collect();
+            let mut all_albums = Vec::new();
             // check whether an album path is contained in another one
             dirs_to_handle.iter().for_each(|dir| {
                 let albums = albums_in_dir(dir);
                 albums.iter().enumerate().for_each(|(i, a)| {
+                    all_albums.push(a.clone());
                     if let Some((_, a2)) = albums
                         .iter()
                         .enumerate()
@@ -313,6 +318,48 @@ fn run() -> Result<()> {
                     }
                 });
             });
+
+            // check for albums with the same contents, but different key
+            all_albums
+                .iter()
+                .filter(|a| !a.tracks.is_empty())
+                .enumerate()
+                .for_each(|(i, a1)| {
+                    all_albums[i + 1..]
+                        .iter()
+                        .filter(|a2| a1.key() != a2.key() && a1.tracks == a2.tracks)
+                        .for_each(|a2| {
+                            println!(
+                                "Found duplicate albums: {} ({}) and {} ({})",
+                                a1.overview(),
+                                a1.key(),
+                                a2.overview(),
+                                a2.key()
+                            )
+                        });
+                });
+
+            // check for symlinks in source directories
+            let mut pos = 0;
+            let mut dirs_to_handle: Vec<PathBuf> = config.source_directories.clone();
+            while pos < dirs_to_handle.len() {
+                let dir = &dirs_to_handle[pos];
+                if let Ok(items) = read_dir(dir) {
+                    for child in items {
+                        if let Ok(child) = child
+                            && let Ok(ft) = child.file_type()
+                        {
+                            if ft.is_symlink() {
+                                println!("{child:?} is a symlink")
+                            } else if ft.is_dir() {
+                                dirs_to_handle.push(child.path().to_path_buf());
+                            }
+                        }
+                    }
+                }
+                pos += 1;
+            }
+
             Ok(())
         }
         Commands::CleanUpTags { dir, no_cache } => {
@@ -361,6 +408,38 @@ fn run() -> Result<()> {
                         println!("Failed to download cover file: {res:?}");
                     }
                 });
+            Ok(())
+        }
+        Commands::Fix => {
+            let config = DirConfig::read().unwrap();
+            // check for symlinks in source directories
+            let mut pos = 0;
+            let mut dirs_to_handle: Vec<PathBuf> = config.source_directories.clone();
+            while pos < dirs_to_handle.len() {
+                let dir = &dirs_to_handle[pos];
+                if let Ok(items) = read_dir(dir) {
+                    for child in items {
+                        if let Ok(child) = child
+                            && let Ok(ft) = child.file_type()
+                        {
+                            if ft.is_symlink() {
+                                println!("{child:?} is a symlink");
+                                if let Ok(sl) = child.path().read_link() {
+                                    println!("Deleting symlink {:?}", child.path());
+                                    let _ = std::fs::remove_dir_all(child.path()).context("");
+                                    let copy_options = CopyOptions::new();
+
+                                    fs_extra::copy_items(&[&sl], child.path(), &copy_options)?;
+                                }
+                            } else if ft.is_dir() {
+                                dirs_to_handle.push(child.path().to_path_buf());
+                            }
+                        }
+                    }
+                }
+                pos += 1;
+            }
+
             Ok(())
         }
     }
