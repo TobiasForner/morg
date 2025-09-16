@@ -30,10 +30,7 @@ pub fn set_missing_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
             tag.set_album_title(&album_info.title);
         }
         if tag.album_artists().is_none() {
-            tag.set_artist(&album_info.artist)
-        }
-        if let Some(year) = album_info.year {
-            tag.set_year(year);
+            tag.set_album_artist(&album_info.artist)
         }
         let number_re = Regex::new(r"(\d+-)?(\d+)").unwrap();
         if let Some(parts) = t.split_once(' ') {
