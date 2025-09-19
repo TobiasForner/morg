@@ -502,22 +502,27 @@ fn ensure_album_is_in_location(
     allow_any: bool,
 ) -> Result<FileType> {
     println!(
-        "Copying missing files of source album {} to device",
-        src_album.overview()
+        "Copying source album {} to location {}",
+        src_album.overview(),
+        location.to_string()
     );
 
     let new_src_album = get_ft_src_album(src_album, dest_ft, album_lookup);
     if let Some(src_album) = new_src_album {
         println!("Found source album {}", src_album.overview());
-        let _ = location.copy_full_album(&src_album);
+        location.copy_full_album(&src_album)?;
         Ok(dest_ft.clone())
     } else if let Some(ft) = src_album.file_type()
         && allow_any
     {
-        let _ = location.copy_full_album(src_album);
+        location.copy_full_album(src_album)?;
         Ok(ft)
     } else {
-        bail!("")
+        bail!(
+            "Failed to find proper source fitting source album for {} [{:?}]. dest_ft is {dest_ft}, allow_any={allow_any}",
+            src_album.overview(),
+            src_album.file_type()
+        )
     }
 }
 
@@ -529,8 +534,10 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
 
     let create_album_dir = || {
         if !new_src_album_dir.exists() {
-            let _ = std::fs::create_dir_all(&new_src_album_dir);
+            std::fs::create_dir_all(&new_src_album_dir)
+                .context(format!("Failed to create {new_src_album_dir:?}"))?;
         }
+        Ok::<(), anyhow::Error>(())
     };
 
     let copy_cover_files = || {
@@ -549,7 +556,7 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
         Some(FileType::Flac) => {
             match dest_ft {
                 FileType::MP3 => {
-                    create_album_dir();
+                    create_album_dir()?;
                     copy_cover_files();
                     src_album.tracks.iter().for_each(|t| {
                         let full_path = src_album.dir_path.join(t);

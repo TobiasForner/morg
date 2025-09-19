@@ -14,6 +14,8 @@ pub trait Location {
     fn copy_full_album(&mut self, src_album: &Album) -> Result<()>;
     fn del_album(&mut self, album: &Album) -> Result<()>;
     fn copy_missing_files(&mut self, src_album: &Album, dst_album: &Album);
+
+    fn to_string(&self) -> String;
 }
 
 #[derive(Debug)]
@@ -39,11 +41,12 @@ impl Location for DirLocation {
         let copy_options = CopyOptions::new();
         match fs_extra::copy_items(&[&src_album.dir_path], dst_path, &copy_options) {
             Ok(_) => Ok(()),
-            Err(_) => bail!(""),
+            Err(e) => bail!("Failed to copy items: {e:?}"),
         }
     }
     fn del_album(&mut self, album: &Album) -> Result<()> {
-        std::fs::remove_dir_all(&album.dir_path).context("")
+        std::fs::remove_dir_all(&album.dir_path)
+            .context(format!("Failed to delete {}", album.overview()))
     }
     fn copy_missing_files(&mut self, src_album: &Album, dst_album: &Album) {
         println!("Copying missing files for {}", src_album.overview());
@@ -84,6 +87,10 @@ impl Location for DirLocation {
             let _ = self.copy_full_album(src_album);
         }
     }
+
+    fn to_string(&self) -> String {
+        format!("DirLocation({:?})", self.dir)
+    }
 }
 
 #[derive(Debug)]
@@ -93,7 +100,13 @@ pub struct AdbLocation {
 impl AdbLocation {
     pub fn new() -> Result<Self> {
         let mut server = ADBServer::default();
-        let devices = server.devices();
+        let devices = server.devices()?;
+        if devices.len() != 1 {
+            bail!("More than one adb device is connected: {devices:?}");
+        } else {
+            let device = &devices[0];
+            println!("Found adb device with state {}", device.state);
+        }
 
         println!("devices: {devices:?}");
         let Ok(device) = server.get_device() else {
@@ -225,5 +238,8 @@ impl Location for AdbLocation {
             );
             let _ = self.copy_full_album(src_album);
         }
+    }
+    fn to_string(&self) -> String {
+        "AdbLocation".to_string()
     }
 }
