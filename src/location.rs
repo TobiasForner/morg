@@ -34,10 +34,10 @@ impl Location for DirLocation {
     }
 
     fn copy_full_album(&mut self, src_album: &Album) -> Result<()> {
-        let dst_path = self
-            .dir
-            .join(&src_album.parsed_artist)
-            .join(&src_album.parsed_title);
+        let dst_path = self.dir.join(&src_album.parsed_artist);
+        if !dst_path.exists() {
+            std::fs::create_dir_all(&dst_path)?;
+        }
         let copy_options = CopyOptions::new();
         match fs_extra::copy_items(&[&src_album.dir_path], dst_path, &copy_options) {
             Ok(_) => Ok(()),
