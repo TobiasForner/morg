@@ -71,6 +71,11 @@ enum Commands {
     Fix,
     /// Just for internal testing purposes
     Test,
+    /// Lists the albums found in src that are missing in dst
+    Diff {
+        src: PathBuf,
+        dst: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -440,6 +445,22 @@ fn run() -> Result<()> {
                 pos += 1;
             }
 
+            Ok(())
+        }
+        Commands::Diff { src, dst } => {
+            let src_albums = albums_in_dir(&src);
+            let dst_albums: HashMap<String, Album> = albums_in_dir(&dst)
+                .into_iter()
+                .map(|a| (a.key(), a))
+                .collect();
+            let mut missing_keys = HashSet::new();
+            src_albums.iter().for_each(|a| {
+                let key = a.key();
+                if !dst_albums.contains_key(&key) && !missing_keys.contains(&key) {
+                    println!("Album missing: {}", a.overview());
+                    missing_keys.insert(key);
+                }
+            });
             Ok(())
         }
     }
