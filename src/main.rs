@@ -24,6 +24,7 @@ use crate::{
     album::{Album, path_to_details},
     location::{AdbLocation, DirLocation, Location},
     music_info::AlbumInfo,
+    music_tags::parse_track_info,
 };
 use crate::{
     album::{albums_in_dir, create_source_album_lookup},
@@ -297,11 +298,32 @@ fn run() -> Result<()> {
                 .cloned()
                 .collect();
             let mut all_albums = Vec::new();
+            let mut albums_by_root = HashMap::new();
             // check whether an album path is contained in another one
             dirs_to_handle.iter().for_each(|dir| {
                 let albums = albums_in_dir(dir);
+                albums_by_root.insert(dir.clone(), albums.clone());
                 albums.iter().enumerate().for_each(|(i, a)| {
                     all_albums.push(a.clone());
+
+                    let mut cache = MusicInfoCache::load(false).unwrap();
+
+                    if let Ok(album_info) = cache.get_album_info(a) {
+                        a.tracks.iter().for_each(|t| {
+                            let track_info = parse_track_info(t, a, &album_info);
+                            if let Some(tn) = track_info.track_number {
+                                let tn = tn.to_string();
+                                if track_info.title.starts_with(&tn)
+                                    || track_info.title.starts_with(&format!("0{tn}"))
+                                {
+                                    println!(
+                                        "Track {t} of album {} starts with its track number",
+                                        a.overview()
+                                    )
+                                }
+                            }
+                        });
+                    }
                     if let Some((_, a2)) = albums
                         .iter()
                         .enumerate()
@@ -364,6 +386,27 @@ fn run() -> Result<()> {
                 }
                 pos += 1;
             }
+
+            // check for albums whose directory is nested too deeply
+            // this is the case for albums that are more than two directories deep inside their
+            // root directory
+            albums_by_root.iter().for_each(|(root, albums)| {
+                albums.iter().for_each(|a| {
+                    let rel = pathdiff::diff_paths(&a.dir_path, root);
+                    if let Some(rel) = rel {
+                        let comps: Vec<String> = rel
+                            .components()
+                            .map(|c| c.as_os_str().to_string_lossy().to_string())
+                            .collect();
+                        if comps.len() > 2 {
+                            println!(
+                                "The directory of album {} is nested too deeply.",
+                                a.overview()
+                            );
+                        }
+                    }
+                })
+            });
 
             Ok(())
         }

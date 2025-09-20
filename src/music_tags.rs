@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use audiotags::{AudioTag, FlacTag, Id3v2Tag, Tag};
@@ -59,13 +59,13 @@ pub fn set_missing_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
     })
 }
 
-struct TrackInfo {
-    title: String,
-    disc_number: Option<u16>,
-    track_number: Option<u16>,
+pub struct TrackInfo {
+    pub title: String,
+    pub disc_number: Option<u16>,
+    pub track_number: Option<u16>,
 }
 
-fn parse_track_info(rel_track_path: &str, album: &Album, album_info: &AlbumInfo) -> TrackInfo {
+pub fn parse_track_info(rel_track_path: &str, album: &Album, album_info: &AlbumInfo) -> TrackInfo {
     let mut res = TrackInfo {
         title: "".to_string(),
         disc_number: None,
@@ -166,6 +166,7 @@ pub fn get_track_tags(
 #[test]
 fn test_parse_track_info() {
     use crate::album::path_to_details;
+    use std::str::FromStr;
     let album = path_to_details(
         PathBuf::from_str("G:\\Music\\Poppy\\Poppy - Negative Spaces [MP3]\\Poppy - Negative Spaces - 04 yesterday.mp3").unwrap(),
         PathBuf::from_str("G:\\Music").unwrap(),
