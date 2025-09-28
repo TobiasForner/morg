@@ -594,13 +594,82 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
             }
         });
     };
+    let get_input_args = |full_input_track_path: &PathBuf| match src_album.file_type() {
+        Some(FileType::Flac) => Ok(vec![
+            "-i".to_string(),
+            full_input_track_path.to_str().expect("").to_string(),
+        ]),
+        Some(FileType::Wav) => Ok(vec![
+            "-i".to_string(),
+            full_input_track_path.to_str().expect("").to_string(),
+        ]),
+        None => {
+            bail!(
+                "Failed to determine filetype of source album {}",
+                src_album.overview()
+            )
+        }
+        Some(ft) => bail!("Not implemented: Conversions from filetype {ft}"),
+    };
+    let get_output_args = |full_output_track_path: &PathBuf| match dest_ft {
+        FileType::MP3 => {
+            let tmp: Vec<String> = [
+                "-ab",
+                "320k",
+                "-map_metadata",
+                "0",
+                "-id3v2_version",
+                "3",
+                "-write_id3v1",
+                "1",
+                full_output_track_path.to_str().expect(""),
+            ]
+            .iter()
+            .map(|a| a.to_string())
+            .collect();
+            Ok(tmp)
+        }
+        FileType::Flac => Ok(vec![
+            full_output_track_path
+                .to_str()
+                .context(format!(
+                    "Failed to convert {full_output_track_path:?} to string"
+                ))?
+                .to_string(),
+        ]),
+        ft => bail!("NOT IMPLEMENTED: conversion to {ft:?}"),
+    };
     let mut new_tracks = vec![];
-    match src_album.file_type() {
+    create_album_dir()?;
+    copy_cover_files();
+    src_album.tracks.iter().for_each(|t| {
+        let full_path = src_album.dir_path.join(t);
+        let t_new = t.replace(".flac", &format!(".{desired_ft}"));
+        let dst_path = new_src_album_dir.join(&t_new);
+        println!("Track: {full_path:?} --> {dst_path:?}");
+        let mut args = vec![String::from("-i")];
+        if let Ok(mut input_args) = get_input_args(&full_path)
+            && let Ok(mut output_args) = get_output_args(&dst_path)
+        {
+            args.append(&mut input_args);
+            args.append(&mut output_args);
+        }
+        Command::new("ffmpeg")
+            .args(&args)
+            .output()
+            .expect("failed to convert {full_path:?}");
+        let track = dst_path
+            .file_name()
+            .expect("Destination music file should have a file_name")
+            .to_str()
+            .expect("")
+            .to_string();
+        new_tracks.push(track);
+    });
+    /*match src_album.file_type() {
         Some(FileType::Flac) => {
             match dest_ft {
                 FileType::MP3 => {
-                    create_album_dir()?;
-                    copy_cover_files();
                     src_album.tracks.iter().for_each(|t| {
                         let full_path = src_album.dir_path.join(t);
                         let t_new = t.replace(".flac", &format!(".{desired_ft}"));
@@ -641,13 +710,14 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
                 }
             }
         }
+        Some(FileType::Wav) => {}
         _ => {
             println!(
                 "TODO: implement conversion {:?} --> {dest_ft:?}",
                 src_album.file_type()
             );
         }
-    }
+    }*/
     if new_tracks.len() == src_album.tracks.len() {
         Ok(Album::new(
             src_album.title.clone(),
@@ -659,7 +729,7 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
             src_album.parsed_artist.clone(),
         ))
     } else {
-        bail!("Failed to convert src album: {src_album:?} -->{new_src_album_dir:?} ");
+        bail!("Failed to convert src album: {src_album:?} --> {new_src_album_dir:?} ");
     }
 }
 
