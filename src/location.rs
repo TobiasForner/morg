@@ -39,6 +39,7 @@ impl Location for DirLocation {
             std::fs::create_dir_all(&dst_path)?;
         }
         let copy_options = CopyOptions::new();
+        println!("Copying {:?} to {dst_path:?}", src_album.dir_path);
         match fs_extra::copy_items(&[&src_album.dir_path], dst_path, &copy_options) {
             Ok(_) => Ok(()),
             Err(e) => bail!("Failed to copy items: {e:?}"),
@@ -80,10 +81,10 @@ impl Location for DirLocation {
                 }
             });
         } else {
-            println!(
+            /*println!(
                 "copying {:?} to {:?}!",
                 src_album.dir_path, dst_album.dir_path
-            );
+            );*/
             let _ = self.copy_full_album(src_album);
         }
     }
