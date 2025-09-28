@@ -177,7 +177,7 @@ impl Location for AdbLocation {
                         println!("{success:?}");
                     }
                 }
-                Err(_) => println!("Cannot open track file {full_track_file:?}"),
+                Err(e) => println!("Cannot open track file {full_track_file:?}: {e:?}"),
             }
         });
         Ok(())
