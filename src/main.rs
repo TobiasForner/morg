@@ -647,7 +647,7 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
         let t_new = t.replace(".flac", &format!(".{desired_ft}"));
         let dst_path = new_src_album_dir.join(&t_new);
         println!("Track: {full_path:?} --> {dst_path:?}");
-        let mut args = vec![String::from("-i")];
+        let mut args = vec![];
         if let Ok(mut input_args) = get_input_args(&full_path)
             && let Ok(mut output_args) = get_output_args(&dst_path)
         {
