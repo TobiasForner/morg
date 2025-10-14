@@ -32,7 +32,8 @@ root_dir
         - In this case the directory should have the name of the artist (or a sanitized version). This name may be used to determine the meta data.
         - The children of the artist directory should represent albums (and should be named like that album)
     - albums. In this case the directory should have a name of the form `<Artist> - <Album name> [filetype]` or `<Artist> - <Album name>`.
-- the album directories contain the song files and an optional image file that will be assumed to be the album cover.
+- The album directories contain the song files and an optional image file that will be assumed to be the album cover.
+- The combination of album artist and album title that can be obtained from the album path should **uniquely identify** each album.
 
 ## Usage
 Use `cargo run -- --help` to get an overview of the available commands
