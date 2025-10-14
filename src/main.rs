@@ -53,6 +53,8 @@ enum Commands {
         #[command(subcommand)]
         subcommand: ConfigCommands,
     },
+    /// check your configured directories for issues like duplicate albums, albums that are nested
+    /// too deeply and many more
     Check,
     /// sync files in the sources to the destination directories. If a suitable ADB connection can
     /// be established, the files are also synced to the first ADB device
@@ -69,14 +71,12 @@ enum Commands {
         #[arg(short, long)]
         overwrite: bool,
     },
+    /// WIP: fixes some issues in the file setup
     Fix,
     /// Just for internal testing purposes
     Test,
     /// Lists the albums found in src that are missing in dst
-    Diff {
-        src: PathBuf,
-        dst: PathBuf,
-    },
+    Diff { src: PathBuf, dst: PathBuf },
 }
 
 #[derive(Subcommand)]
