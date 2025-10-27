@@ -41,3 +41,10 @@ Use `cargo run -- --help` to get an overview of the available commands
 ## Build
 `cargo build --release`
 Copy the generated executable file wherever you prefer.
+
+### Dependencies
+- `ffmpeg` is used for file conversions
+
+## Implementation details
+- root directories are accessed and albums are manipulated via the `Location` trait. It abstracts away how album files are handled (copied, deleted, converted)
+- if an album has to be converted to a different file type, a new copy of the album with that file type is created in the source location the album was found in
