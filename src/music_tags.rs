@@ -6,33 +6,22 @@ use regex::Regex;
 
 use crate::{Album, FileType, music_info::AlbumInfo};
 
-fn get_empty_mp3_tag() -> Box<dyn AudioTag + Send + Sync> {
-    Box::new(Id3v2Tag::new())
-}
-
-fn get_empty_flac_tag() -> Box<dyn AudioTag + Send + Sync> {
-    Box::new(FlacTag::new())
-}
-
 pub fn set_missing_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
     album.tracks.iter().try_for_each(|t| {
         let track_path = album.dir_path.join(t);
-        let mut tag = match Tag::new().read_from_path(&track_path) {
-            Ok(tag) => tag,
-            Err(_) => match album.file_type() {
-                Some(FileType::MP3) => get_empty_mp3_tag(),
-                Some(FileType::Flac) => get_empty_flac_tag(),
-                _ => bail!(""),
-            },
-        };
+        let mut tag = get_tag(&track_path, album)?;
 
         if tag.album_title().is_none() {
             tag.set_album_title(&album_info.title);
         }
-        if tag.album_artists().is_none() {
-            tag.set_album_artist(&album_info.artist)
+        if let Some(aa) = tag.album_artist()
+            && aa.is_empty()
+        {
+            tag.set_album_artist(&album_info.artist);
+        } else if tag.album_artist().is_none() {
+            tag.set_album_artist(&album_info.artist);
         }
-        if tag.artists().is_none() {
+        if tag.artist().is_none() {
             tag.set_artist(&album_info.artist)
         }
         let track_info = parse_track_info(t, album, album_info);
@@ -100,21 +89,39 @@ pub fn parse_track_info(rel_track_path: &str, album: &Album, album_info: &AlbumI
     res
 }
 
+fn get_tag(track_path: &PathBuf, album: &Album) -> Result<Box<dyn AudioTag + Send + Sync>> {
+    let tag = match Tag::new().read_from_path(track_path) {
+        Ok(tag) => tag,
+        Err(_) => {
+            let tag: Box<dyn AudioTag + Send + Sync> = match album.file_type() {
+                Some(FileType::MP3) => Box::new(Id3v2Tag::new()),
+                Some(FileType::Flac) => Box::new(FlacTag::new()),
+                Some(ft) => bail!("Could not create tag object for file type {ft}."),
+                None => bail!("Failed to create tag: file type of album {album:?} is not known."),
+            };
+            tag
+        }
+    };
+    Ok(tag)
+}
+
 pub fn set_tags(album: &Album, album_info: &AlbumInfo) -> Result<()> {
+    let mut first = true;
     album.tracks.iter().try_for_each(|t| {
         let track_path = album.dir_path.join(t);
-        let mut tag = match Tag::new().read_from_path(&track_path) {
-            Ok(tag) => tag,
-            Err(_) => match album.file_type() {
-                Some(FileType::MP3) => get_empty_mp3_tag(),
-                Some(FileType::Flac) => get_empty_flac_tag(),
-                _ => bail!(""),
-            },
-        };
+        let mut tag = get_tag(&track_path, album)?;
 
         tag.set_album_title(&album_info.title);
-        if tag.album_artists().is_none() {
-            tag.set_artist(&album_info.artist)
+        if first {
+            println!("aa: {:?}", tag.album_artist());
+        }
+        first = false;
+        if tag.album_artist().is_none() {
+            tag.set_album_artist(&album_info.artist);
+        } else if let Some(aa) = tag.album_artist()
+            && aa.is_empty()
+        {
+            tag.set_album_artist(&album_info.artist);
         }
         if let Some(year) = album_info.year {
             tag.set_year(year);
