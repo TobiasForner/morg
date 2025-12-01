@@ -509,30 +509,31 @@ fn run() -> Result<()> {
     }
 }
 
+/// tries to obtain a copy of album with file type `dest_ft`
 fn get_ft_src_album(
     album: &Album,
     dest_ft: &FileType,
     album_lookup: &HashMap<(String, FileType), (Album, PathBuf)>,
 ) -> Option<Album> {
     if let Some((src_album, _src)) = album_lookup.get(&(album.key(), dest_ft.clone())) {
-        Some(src_album.clone())
-    } else if let Some((src_album, src)) = album_lookup.get(&(album.key(), FileType::Flac))
-        && *dest_ft != FileType::Flac
-    {
-        println!(
-            "Found Flac source album {:?}. Converting to {dest_ft:?}",
-            album.overview()
-        );
-        convert_src_album(src, src_album, dest_ft).ok()
-    } else if let Some((_src_album, _src)) = album_lookup.get(&(album.key(), FileType::Wav))
-        && *dest_ft != FileType::Wav
-    {
-        println!("Found wav source album {:?}", album.overview());
-        println!("NOT IMPLEMENTED: Album conversion wav => mp3");
-        None
+        return Some(src_album.clone());
     } else {
-        None
-    }
+        // this is the order in which src_ft are tried for conversion
+        let src_ft_order = [FileType::Flac, FileType::Wav, FileType::MP3];
+        for ft in src_ft_order {
+            if let Some((src_album, src)) = album_lookup.get(&(album.key(), ft.clone())) {
+                println!(
+                    "Found {ft:?} source album {:?}. Converting to {dest_ft:?}",
+                    album.overview()
+                );
+                let res = convert_src_album(src, src_album, dest_ft);
+                if let Ok(res) = res {
+                    return Some(res);
+                }
+            }
+        }
+    };
+    None
 }
 
 /// simply copies the album files to the location in the desired file type
