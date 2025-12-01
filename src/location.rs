@@ -3,7 +3,6 @@ use std::{fs::File, io::BufWriter, path::PathBuf, str::FromStr};
 use crate::{
     Album,
     album::{albums_in_dir, group_files_into_albums},
-    del_album_on_device, dir_exists_on_adb_device,
 };
 use adb_client::{ADBDeviceExt, ADBServer, ADBServerDevice};
 use anyhow::{Context, Result, bail};
@@ -115,6 +114,22 @@ impl AdbLocation {
         };
         Ok(AdbLocation { device })
     }
+    fn dir_exists_on_adb_device(&mut self, path: &str) -> bool {
+        let mut path = path.to_string();
+        if !(path.starts_with('\"')) {
+            path = format!("\"{path}");
+        }
+        if !(path.ends_with('\"')) {
+            path = format!("{path}\"");
+        }
+        let cmd = format!("if [ -d {path} ]; then echo 'Exists'; else echo 'Not found'; fi");
+        let command: Vec<&str> = vec![&cmd];
+        let mut buf = BufWriter::new(Vec::new());
+        let _ = self.device.shell_command(&command, &mut buf);
+        let bytes = buf.into_inner().unwrap();
+        let out = String::from_utf8_lossy(&bytes).to_string();
+        out.contains("Exists")
+    }
 }
 
 impl Location for AdbLocation {
@@ -135,7 +150,7 @@ impl Location for AdbLocation {
 
     fn copy_full_album(&mut self, src_album: &Album) -> Result<()> {
         let adb_artist_dir = format!("/storage/emulated/0/Music/{}", &src_album.parsed_artist);
-        if !dir_exists_on_adb_device(&mut self.device, &adb_artist_dir) {
+        if !self.dir_exists_on_adb_device(&adb_artist_dir) {
             let mut buf = BufWriter::new(Vec::new());
             let adb_dir_s = format!("\"{adb_artist_dir}\"");
             let command = vec!["mkdir", &adb_dir_s];
@@ -146,7 +161,7 @@ impl Location for AdbLocation {
         let adb_album_dir = adb_album_dir.to_str().unwrap();
         let adb_album_dir = adb_album_dir.replace("\\", "/");
         let adb_album_dir_s = format!("\"{adb_album_dir}\"");
-        if !dir_exists_on_adb_device(&mut self.device, &adb_album_dir_s) {
+        if !self.dir_exists_on_adb_device(&adb_album_dir_s) {
             let mut buf = BufWriter::new(Vec::new());
             // TODO: only replace unescaped double backslash
             let command = vec!["mkdir", &adb_album_dir_s];
@@ -184,13 +199,24 @@ impl Location for AdbLocation {
     }
 
     fn del_album(&mut self, album: &Album) -> Result<()> {
-        del_album_on_device(album, &mut self.device);
+        let mut buf = BufWriter::new(Vec::new());
+        let album_path = album
+            .dir_path
+            .to_str()
+            .expect("adb album path must be convertible to str");
+        let album_path = format!("\"{album_path}\"");
+        println!("Attempting to delete {album_path}");
+        let command = vec!["rm", "-rf", &album_path];
+        let _ = self.device.shell_command(&command, &mut buf);
+        let bytes = buf.into_inner().unwrap();
+        let out = String::from_utf8_lossy(&bytes).to_string();
+        println!("{out}");
         Ok(())
     }
 
     fn copy_missing_files(&mut self, src_album: &Album, dst_album: &Album) {
         let dst_dir = dst_album.dir_path.to_str().unwrap();
-        if dir_exists_on_adb_device(&mut self.device, dst_dir) {
+        if self.dir_exists_on_adb_device(dst_dir) {
             src_album.tracks.iter().for_each(|src_track| {
                 if !dst_album.tracks.iter().any(|t| t == src_track) {
                     let src_track = src_album.dir_path.join(src_track);

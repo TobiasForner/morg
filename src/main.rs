@@ -9,7 +9,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     fs::read_dir,
-    io::BufWriter,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
@@ -31,7 +30,6 @@ use crate::{
     music_tags::set_missing_tags,
 };
 
-use adb_client::{ADBDeviceExt, ADBServerDevice};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::music_info::download_cover_file;
@@ -732,38 +730,6 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     } else {
         bail!("Failed to convert src album: {src_album:?} --> {new_src_album_dir:?} ");
     }
-}
-
-fn del_album_on_device(adb_album: &Album, device: &mut ADBServerDevice) {
-    let mut buf = BufWriter::new(Vec::new());
-    let album_path = adb_album
-        .dir_path
-        .to_str()
-        .expect("adb album path must be convertible to str");
-    let album_path = format!("\"{album_path}\"");
-    println!("Attempting to delete {album_path}");
-    let command = vec!["rm", "-rf", &album_path];
-    let _ = device.shell_command(&command, &mut buf);
-    let bytes = buf.into_inner().unwrap();
-    let out = String::from_utf8_lossy(&bytes).to_string();
-    println!("{out}");
-}
-
-fn dir_exists_on_adb_device(device: &mut ADBServerDevice, path: &str) -> bool {
-    let mut path = path.to_string();
-    if !(path.starts_with('\"')) {
-        path = format!("\"{path}");
-    }
-    if !(path.ends_with('\"')) {
-        path = format!("{path}\"");
-    }
-    let cmd = format!("if [ -d {path} ]; then echo 'Exists'; else echo 'Not found'; fi");
-    let command: Vec<&str> = vec![&cmd];
-    let mut buf = BufWriter::new(Vec::new());
-    let _ = device.shell_command(&command, &mut buf);
-    let bytes = buf.into_inner().unwrap();
-    let out = String::from_utf8_lossy(&bytes).to_string();
-    out.contains("Exists")
 }
 
 fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, allow_any: bool) {
