@@ -593,22 +593,11 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
             }
         });
     };
-    let get_input_args = |full_input_track_path: &PathBuf| match src_album.file_type() {
-        Some(FileType::Flac) => Ok(vec![
+    let get_input_args = |full_input_track_path: &PathBuf| {
+        vec![
             "-i".to_string(),
             full_input_track_path.to_str().expect("").to_string(),
-        ]),
-        Some(FileType::Wav) => Ok(vec![
-            "-i".to_string(),
-            full_input_track_path.to_str().expect("").to_string(),
-        ]),
-        None => {
-            bail!(
-                "Failed to determine filetype of source album {}",
-                src_album.overview()
-            )
-        }
-        Some(ft) => bail!("Not implemented: Conversions from filetype {ft}"),
+        ]
     };
     let get_output_args = |full_output_track_path: &PathBuf| match dest_ft {
         FileType::MP3 => {
@@ -650,11 +639,8 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
         let t_new = t.replace(&format!(".{src_ft_str}"), &format!(".{desired_ft}"));
         let dst_path = new_src_album_dir.join(&t_new);
         println!("Track: {full_path:?} --> {dst_path:?}");
-        let mut args = vec![];
-        if let Ok(mut input_args) = get_input_args(&full_path)
-            && let Ok(mut output_args) = get_output_args(&dst_path)
-        {
-            args.append(&mut input_args);
+        let mut args = get_input_args(&full_path);
+        if let Ok(mut output_args) = get_output_args(&dst_path) {
             args.append(&mut output_args);
         }
         Command::new("ffmpeg")
