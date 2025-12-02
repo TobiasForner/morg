@@ -674,58 +674,6 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
             .to_string();
         new_tracks.push(track);
     });
-    /*match src_album.file_type() {
-        Some(FileType::Flac) => {
-            match dest_ft {
-                FileType::MP3 => {
-                    src_album.tracks.iter().for_each(|t| {
-                        let full_path = src_album.dir_path.join(t);
-                        let t_new = t.replace(".flac", &format!(".{desired_ft}"));
-                        let dst_path = new_src_album_dir.join(&t_new);
-                        println!("Track: {full_path:?} --> {dst_path:?}");
-                        // TODO: invesigate whether/which other commands are required for different combinations of src and
-                        // dest filetypes
-                        Command::new("ffmpeg")
-                            .args([
-                                "-i",
-                                full_path.to_str().expect(""),
-                                "-ab",
-                                "320k",
-                                "-map_metadata",
-                                "0",
-                                "-id3v2_version",
-                                "3",
-                                "-write_id3v1",
-                                "1",
-                                dst_path.to_str().expect(""),
-                            ])
-                            .output()
-                            .expect("failed to convert {full_path:?}");
-                        let track = dst_path
-                            .file_name()
-                            .expect("Destination music file should have a file_name")
-                            .to_str()
-                            .expect("")
-                            .to_string();
-                        new_tracks.push(track);
-                    })
-                }
-                _ => {
-                    println!(
-                        "TODO: implement conversion {:?} --> {dest_ft:?}",
-                        src_album.file_type()
-                    );
-                }
-            }
-        }
-        Some(FileType::Wav) => {}
-        _ => {
-            println!(
-                "TODO: implement conversion {:?} --> {dest_ft:?}",
-                src_album.file_type()
-            );
-        }
-    }*/
     if new_tracks.len() == src_album.tracks.len() {
         Ok(Album::new(
             src_album.title.clone(),
