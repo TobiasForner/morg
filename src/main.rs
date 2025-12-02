@@ -641,9 +641,13 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     let mut new_tracks = vec![];
     create_album_dir()?;
     copy_cover_files();
+    let src_ft_str = src_ft
+        .to_possible_value()
+        .expect("src_ft should have a value attached");
+    let src_ft_str = src_ft_str.get_name();
     src_album.tracks.iter().for_each(|t| {
         let full_path = src_album.dir_path.join(t);
-        let t_new = t.replace(".flac", &format!(".{desired_ft}"));
+        let t_new = t.replace(&format!(".{src_ft_str}"), &format!(".{desired_ft}"));
         let dst_path = new_src_album_dir.join(&t_new);
         println!("Track: {full_path:?} --> {dst_path:?}");
         let mut args = vec![];
