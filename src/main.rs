@@ -536,6 +536,8 @@ fn get_ft_src_album(
                 let res = convert_src_album(src, src_album, dest_ft);
                 if let Ok(res) = res {
                     return Some(res);
+                } else {
+                    println!("Conversion {} -> {dest_ft} failed!", album.overview());
                 }
             }
         }
