@@ -35,7 +35,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crate::music_info::download_cover_file;
 
 const IMAGE_EXTENSIONS: [&str; 3] = ["jpeg", "jpg", "png"];
-const MUSIC_EXTENSIONS: [&str; 3] = ["mp3", "flac", "wav"];
+const MUSIC_EXTENSIONS: [&str; 4] = ["mp3", "flac", "wav", "m4a"];
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -104,6 +104,7 @@ enum ConfigCommands {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum FileType {
+    M4A,
     MP3,
     Wav,
     Flac,
@@ -121,6 +122,7 @@ impl ValueEnum for FileType {
         use FileType::*;
         Some(
             match self {
+                M4A => "m4a",
                 MP3 => "mp3",
                 Wav => "wav",
                 Flac => "flac",
@@ -130,7 +132,7 @@ impl ValueEnum for FileType {
     }
     fn value_variants<'a>() -> &'a [Self] {
         use FileType::*;
-        &[MP3, Wav, Flac]
+        &[M4A, MP3, Wav, Flac]
     }
 }
 
@@ -524,7 +526,7 @@ fn get_ft_src_album(
         return Some(src_album.clone());
     } else {
         // this is the order in which src_ft are tried for conversion
-        let src_ft_order = [FileType::Flac, FileType::Wav, FileType::MP3];
+        let src_ft_order = [FileType::Flac, FileType::Wav, FileType::MP3, FileType::M4A];
         for ft in src_ft_order {
             if let Some((src_album, src)) = album_lookup.get(&(album.key(), ft.clone())) {
                 println!(
