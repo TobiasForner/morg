@@ -109,6 +109,13 @@ pub enum FileType {
     Flac,
 }
 
+impl FileType {
+    fn is_lossless(&self) -> bool {
+        use FileType::*;
+        matches!(self, Wav | Flac)
+    }
+}
+
 impl ValueEnum for FileType {
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         use FileType::*;
@@ -569,6 +576,18 @@ fn ensure_album_is_in_location(
 }
 
 fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Result<Album> {
+    let Some(src_ft) = src_album.file_type() else {
+        bail!(
+            "Failed to determine filetype of source album {}",
+            src_album.overview()
+        )
+    };
+    if dest_ft.is_lossless() && !src_ft.is_lossless() {
+        bail!(
+            "Converting a lossy music format to a lossless one ({dest_ft}) is prohibited! src_album: {}",
+            src_album.overview()
+        )
+    }
     let desired_ft = dest_ft.to_possible_value().expect("");
     let desired_ft = desired_ft.get_name();
 
