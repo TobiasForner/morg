@@ -22,7 +22,7 @@ mod music_info;
 mod music_tags;
 use crate::{
     album::{Album, path_to_details},
-    location::{AdbLocation, DirLocation, Location},
+    location::{AdbLocation, DirLocation, Location, SymlinkLocation},
     music_info::AlbumInfo,
     music_tags::parse_track_info,
 };
@@ -97,6 +97,8 @@ enum ConfigCommands {
         #[arg()]
         directory: PathBuf,
         ft: FileType,
+        #[clap(default_value_t = false)]
+        symlink: bool,
         #[clap(default_value_t = false)]
         allow_any: bool,
     },
@@ -182,6 +184,7 @@ impl DirConfig {
 #[derive(Clone, Deserialize, Serialize)]
 enum Destination {
     PathDest(PathBuf),
+    SymlinkDest(PathBuf),
     ADBDest,
 }
 
@@ -201,12 +204,21 @@ fn run() -> Result<()> {
                 AddDest {
                     directory,
                     ft,
+                    symlink,
                     allow_any,
                 } => {
                     let mut config = DirConfig::read()?;
-                    config
-                        .destinations
-                        .push((Destination::PathDest(directory), ft, allow_any));
+                    if symlink {
+                        config.destinations.push((
+                            Destination::SymlinkDest(directory),
+                            ft,
+                            allow_any,
+                        ));
+                    } else {
+                        config
+                            .destinations
+                            .push((Destination::PathDest(directory), ft, allow_any));
+                    }
                     config.write()?;
                 }
                 AddSource { directory } => {
@@ -260,6 +272,7 @@ fn run() -> Result<()> {
                         1
                     }
                 }
+                Destination::SymlinkDest(_) => 1,
                 Destination::ADBDest => 1,
             });
 
@@ -269,6 +282,11 @@ fn run() -> Result<()> {
                     Destination::PathDest(p) => {
                         println!("===== Syncing to dir {p:?} =====");
                         let mut loc = DirLocation::new(p.to_path_buf());
+                        sync_to_loc(&mut loc, ft, &config, *allow_any);
+                    }
+                    Destination::SymlinkDest(p) => {
+                        println!("===== Syncing to dir {p:?} (symlink) =====");
+                        let mut loc = SymlinkLocation::new(p.to_path_buf());
                         sync_to_loc(&mut loc, ft, &config, *allow_any);
                     }
                     Destination::ADBDest => {
@@ -573,7 +591,7 @@ fn convert_src_album(src: &Path, src_album: &Album, dest_ft: &FileType) -> Resul
     let desired_ft = dest_ft.to_possible_value().expect("");
     let desired_ft = desired_ft.get_name();
 
-    let new_src_album_dir = src_album.album_dir_with_ft(src.to_path_buf(), &Some(dest_ft.clone()));
+    let new_src_album_dir = src_album.album_dir_with_ft(src, &Some(dest_ft.clone()));
 
     let create_album_dir = || {
         if !new_src_album_dir.exists() {

@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter, path::PathBuf, str::FromStr};
+use std::{fs::File, io::BufWriter, os::windows::fs::symlink_dir, path::PathBuf, str::FromStr};
 
 use crate::{
     Album,
@@ -142,7 +142,7 @@ impl Location for AdbLocation {
             let _ = self.device.shell_command(&command, &mut buf);
         }
         let adb_album_dir =
-            src_album.album_dir_with_ft(PathBuf::from("/storage/emulated/0/Music"), &None);
+            src_album.album_dir_with_ft(&PathBuf::from("/storage/emulated/0/Music"), &None);
         let adb_album_dir = adb_album_dir.to_str().unwrap();
         let adb_album_dir = adb_album_dir.replace("\\", "/");
         let adb_album_dir_s = format!("\"{adb_album_dir}\"");
@@ -242,5 +242,59 @@ impl Location for AdbLocation {
     }
     fn to_string(&self) -> String {
         "AdbLocation".to_string()
+    }
+}
+
+pub struct SymlinkLocation {
+    dir: PathBuf,
+}
+
+impl SymlinkLocation {
+    pub fn new(dir: PathBuf) -> Self {
+        Self { dir }
+    }
+}
+
+impl Location for SymlinkLocation {
+    fn albums(&mut self) -> Result<Vec<Album>> {
+        Ok(albums_in_dir(&self.dir))
+    }
+
+    fn copy_full_album(&mut self, src_album: &Album) -> Result<()> {
+        let dst_dir = src_album.album_dir_with_ft(&self.dir, &src_album.file_type());
+        let artist_dir = self.dir.join(&src_album.parsed_artist);
+        if !artist_dir.exists() {
+            std::fs::create_dir(artist_dir)?;
+        }
+        if dst_dir.exists() {
+            if dst_dir.is_symlink() {
+                let pointed_dir = dst_dir.canonicalize()?;
+                if pointed_dir == src_album.dir_path {
+                } else {
+                    std::fs::remove_file(&dst_dir)?;
+                    symlink_dir(&src_album.dir_path, &dst_dir)?;
+                }
+            } else {
+                println!("{} contains non-symlink dir: {dst_dir:?}", self.to_string())
+            }
+        } else {
+            symlink_dir(&src_album.dir_path, &dst_dir)?;
+        }
+        Ok(())
+    }
+
+    fn copy_missing_files(&mut self, src_album: &Album, _dst_album: &Album) {
+        let _ = self.copy_full_album(src_album);
+    }
+
+    fn del_album(&mut self, album: &Album) -> Result<()> {
+        if album.dir_path.starts_with(&self.dir) && album.dir_path.exists() {
+            std::fs::remove_file(&album.dir_path)?;
+        }
+        Ok(())
+    }
+
+    fn to_string(&self) -> String {
+        format!("SymlinkLocation({:?})", self.dir)
     }
 }

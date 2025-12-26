@@ -70,7 +70,7 @@ impl Album {
         self.title.clone()
     }
 
-    pub fn album_dir_with_ft(&self, root_dir: PathBuf, ft: &Option<FileType>) -> PathBuf {
+    pub fn album_dir_with_ft(&self, root_dir: &Path, ft: &Option<FileType>) -> PathBuf {
         let title = if let Some(ft) = ft {
             format!(
                 "{} [{}]",
