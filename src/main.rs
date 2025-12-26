@@ -324,7 +324,8 @@ fn run() -> Result<()> {
                                     || track_info.title.starts_with(&format!("0{tn}"))
                                 {
                                     println!(
-                                        "Track {t} of album {} starts with its track number",
+                                        "Track '{}' (file '{t}') of album '{}' starts with its track number '{tn}'",
+                                        track_info.title,
                                         a.overview()
                                     )
                                 }
