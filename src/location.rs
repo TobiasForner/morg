@@ -102,7 +102,9 @@ impl AdbLocation {
     pub fn new() -> Result<Self> {
         let mut server = ADBServer::default();
         let devices = server.devices()?;
-        if devices.len() != 1 {
+        if devices.is_empty() {
+            bail!("No ADB device found!")
+        } else if devices.len() > 1 {
             bail!("More than one adb device is connected: {devices:?}");
         } else {
             let device = &devices[0];
