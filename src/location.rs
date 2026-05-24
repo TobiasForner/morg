@@ -136,7 +136,7 @@ impl Location for AdbLocation {
     }
 
     fn copy_full_album(&mut self, src_album: &Album) -> Result<()> {
-        let adb_artist_dir = format!("/storage/emulated/0/Music/{}", &src_album.parsed_artist);
+        let adb_artist_dir = format!("/storage/emulated/0/Music/{}", src_album.parsed_artist);
         if !dir_exists_on_adb_device(&mut self.device, &adb_artist_dir) {
             let mut buf = BufWriter::new(Vec::new());
             let adb_dir_s = format!("\"{adb_artist_dir}\"");
