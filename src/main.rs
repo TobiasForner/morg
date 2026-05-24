@@ -97,9 +97,9 @@ enum ConfigCommands {
         #[arg()]
         directory: PathBuf,
         ft: FileType,
-        #[clap(default_value_t = false)]
+        #[clap(short, long, required = false, default_value_t = false)]
         symlink: bool,
-        #[clap(default_value_t = false)]
+        #[clap(short, long, default_value_t = false)]
         allow_any: bool,
     },
     /// Prints the config file location
