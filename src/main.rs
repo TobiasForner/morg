@@ -553,6 +553,38 @@ fn get_ft_src_album(
     }
 }
 
+fn get_best_src_album(
+    album: &Album,
+    dest_ft: &FileType,
+    album_lookup: &HashMap<(String, FileType), (Album, PathBuf)>,
+    allow_any: bool,
+) -> Option<Album> {
+    if !allow_any {
+        get_ft_src_album(album, dest_ft, album_lookup)
+    } else {
+        // order to try: dest_ft, album_ft, remaining
+        let mut filetypes = FileType::value_variants().to_vec();
+        filetypes.sort_by_key(|ft| {
+            if ft == dest_ft {
+                1
+            } else if let Some(aft) = album.file_type()
+                && *ft == aft
+            {
+                10
+            } else {
+                100
+            }
+        });
+        for ft in filetypes {
+            let tmp = get_ft_src_album(album, &ft, album_lookup);
+            if tmp.is_some() {
+                return tmp;
+            }
+        }
+        None
+    }
+}
+
 /// simply copies the album files to the location in the desired file type
 /// does NOT delete any files in the location
 fn ensure_album_is_in_location(
@@ -801,36 +833,50 @@ fn sync_to_loc(location: &mut dyn Location, ft: &FileType, config: &DirConfig, a
             }
         };
 
-    // try to replace albums with proper filetypes
+    // handle albums that are already present in the location:
     albums.iter().for_each(|a| {
-        if let Some(aft) = a.file_type() {
-            // create proper source album
-            let src_album = get_ft_src_album(a, ft, &album_lookup);
+        let albums_contains_desired_ft = albums
+            .iter()
+            .any(|a2| a2.key() == a.key() && a2.file_type() == Some(ft.clone()));
 
-            // copy files
+        if let Some(aft) = a.file_type() {
+            let src_album = get_best_src_album(a, ft, &album_lookup, allow_any);
+
             if let Some(src_album) = src_album {
-                if aft != *ft {
-                    if !albums
-                        .iter()
-                        .any(|a2| a2.key() == a.key() && a2.file_type() == Some(ft.clone()))
-                    {
+                if let Some(source_ft) = src_album.file_type() {
+                    if aft != *ft {
+                        // album has an incorrect ft:
                         println!(
                             "Found {} with wrong filetype (is {aft:?}, but should be {ft:?})",
                             a.overview()
                         );
-                        println!(
-                            "Will attempt to delete album in destination {:?}",
-                            a.dir_path
-                        );
-                        let _ = location.del_album(a);
-                        copy_full_album(location, &src_album, &mut albums_in_loc);
+                        if source_ft == *ft {
+                            // we found a src with correct ft: replace album
+                            // check whether the dest contains multiple copies of the album with
+                            // different filetypes
+                            // if the correct ft is among them, there is no need to replace the
+                            // current album
+                            if !albums_contains_desired_ft {
+                                println!(
+                                    "Will attempt to delete album in destination {:?}",
+                                    a.dir_path
+                                );
+                                let _ = location.del_album(a);
+                                copy_full_album(location, &src_album, &mut albums_in_loc);
+                            }
+                        } else if source_ft == aft {
+                            // we found a src with the same ft as the album: check for missing files
+                            albums_in_loc.insert((a.key(), aft.clone()));
+                            location.copy_missing_files(&src_album, a);
+                        }
+                    } else if source_ft == aft {
+                        // src album has correct ft, we just try to copy missing files
+                        albums_in_loc.insert((a.key(), aft.clone()));
+                        location.copy_missing_files(&src_album, a);
                     }
-                } else {
-                    albums_in_loc.insert((a.key(), aft.clone()));
-                    location.copy_missing_files(&src_album, a);
                 }
             } else {
-                println!("Did not find {ft:?} source album for {}", a.overview());
+                println!("Did not find suitable source album for {}", a.overview());
                 albums_in_loc.insert((a.key(), aft.clone()));
             }
         } else {
